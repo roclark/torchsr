@@ -1,0 +1,9 @@
+name: basictorch
+dependencies:
+  - python>=3.6
+  - pip
+  - pip:
+    - Pillow
+    - torch
+    - torchvision
+    - tqdm

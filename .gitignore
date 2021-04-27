@@ -1,0 +1,5 @@
+dataset/
+output/
+env/
+*__pycache__*
+.vscode
