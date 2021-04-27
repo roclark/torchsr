@@ -55,11 +55,18 @@ def validate(generator, val_loader, epoch, device):
             utils.save_image(image, f'output/epoch_{epoch}_val_{index}.png', padding=5)
 
 
+def checkpoint_dir(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    return directory
+
+
 def save_model(generator, discriminator, optimizer_gen, optimizer_dis, epoch, device):
-    torch.save(generator.state_dict(), f'checkpoints/generator_epoch_{epoch}_{device}.pth')
-    torch.save(discriminator.state_dict(), f'checkpoints/discriminator_epoch_{epoch}_{device}.pth')
-    torch.save(optimizer_gen.state_dict(), f'checkpoints/optimizer_gen_epoch_{epoch}_{device}.pth')
-    torch.save(optimizer_dis.state_dict(), f'checkpoints/optimizer_dis_epoch_{epoch}_{device}.pth')
+    directory = checkpoint_dir(f'checkpoints/epoch{epoch}')
+    torch.save(generator.state_dict(), f'{directory}/generator_{device}.pth')
+    torch.save(discriminator.state_dict(), f'{directory}/discriminator_{device}.pth')
+    torch.save(optimizer_gen.state_dict(), f'{directory}/optimizer_gen_{device}.pth')
+    torch.save(optimizer_dis.state_dict(), f'{directory}/optimizer_dis_{device}.pth')
 
 
 def train(generator, discriminator, optimizer_gen, optimizer_dis, mse, bce,
