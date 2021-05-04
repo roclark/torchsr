@@ -4,8 +4,10 @@ import torch
 import torch.optim as optim
 import torchvision.utils as utils
 from argparse import ArgumentParser
+from math import log10
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from constants import BATCH_SIZE, EPOCHS, TRAIN_DIR, VAL_DIR
@@ -33,13 +35,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def validate(generator, val_loader, epoch, device):
+def validate(generator, val_loader, epoch, device, writer):
     val_images = []
 
     print(f'Validating results after epoch {epoch}')
 
     with torch.no_grad():
         generator.eval()
+        psnr = 0
 
         for low_res_val, ground_truth_restore, ground_truth_val in tqdm(val_loader):
             batch_size = low_res_val.size(0)
@@ -47,6 +50,8 @@ def validate(generator, val_loader, epoch, device):
             high_res = ground_truth_val.to(device)
 
             super_res = generator(low_res).to(device)
+
+            psnr += 10 * log10(1 / ((super_res - high_res) ** 2).mean().item())
             val_images.extend([to_image()(ground_truth_restore.squeeze(0)),
                                to_image()(high_res.data.cpu().squeeze(0)),
                                to_image()(super_res.data.cpu().squeeze(0))])
@@ -54,9 +59,12 @@ def validate(generator, val_loader, epoch, device):
         val_images = torch.stack(val_images)
         val_images = torch.chunk(val_images, val_images.size(0) // 3)
 
+        writer.add_scalar('val/PSNR', psnr / len(val_loader), epoch)
+
         for index, image in enumerate(val_images):
             image = utils.make_grid(image, nrow=3, padding=5)
             utils.save_image(image, f'output/epoch_{epoch}_val_{index}.png', padding=5)
+        writer.add_image(f'epoch{epoch}_val_{index}.png', image)
 
 
 def checkpoint_dir(directory):
@@ -119,6 +127,7 @@ def train(generator, discriminator, optimizer_gen, optimizer_dis, mse, bce,
 def main():
     args = parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    writer = SummaryWriter()
 
     generator = Generator().to(device)
     discriminator = Discriminator().to(device)
@@ -146,7 +155,7 @@ def main():
 
         train(generator, discriminator, optimizer_gen, optimizer_dis, mse, bce,
               train_loader, epoch, device, args)
-        validate(generator, val_loader, epoch, device)
+        validate(generator, val_loader, epoch, device, writer)
 
 
 if __name__ == "__main__":
