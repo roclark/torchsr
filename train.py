@@ -1,3 +1,5 @@
+import os
+import re
 import torch
 import torch.optim as optim
 import torchvision.utils as utils
@@ -17,6 +19,8 @@ def parse_args():
     parser.add_argument('--batch-size', help='The number of images to include '
                         f'in every batch. Default: {BATCH_SIZE}.', type=int,
                         default=BATCH_SIZE)
+    parser.add_argument('--checkpoint', help='Specify the directory to load a '
+                        'checkpoint from.', type=str)
     parser.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)
@@ -67,6 +71,14 @@ def save_model(generator, discriminator, optimizer_gen, optimizer_dis, epoch, de
     torch.save(discriminator.state_dict(), f'{directory}/discriminator_{device}.pth')
     torch.save(optimizer_gen.state_dict(), f'{directory}/optimizer_gen_{device}.pth')
     torch.save(optimizer_dis.state_dict(), f'{directory}/optimizer_dis_{device}.pth')
+
+
+def load_model(checkpoint, generator, discriminator, optimizer_gen, optimizer_dis, device):
+    if checkpoint:
+        generator.load_state_dict(torch.load(f'{checkpoint}/generator_{device}.pth'))
+        discriminator.load_state_dict(torch.load(f'{checkpoint}/discriminator_{device}.pth'))
+        optimizer_gen.load_state_dict(torch.load(f'{checkpoint}/optimizer_gen_{device}.pth'))
+        optimizer_dis.load_state_dict(torch.load(f'{checkpoint}/optimizer_dis_{device}.pth'))
 
 
 def train(generator, discriminator, optimizer_gen, optimizer_dis, mse, bce,
@@ -121,7 +133,14 @@ def main():
     optimizer_gen = optim.Adam(generator.parameters())
     optimizer_dis = optim.Adam(discriminator.parameters())
 
-    for epoch in range(1, args.epochs + 1):
+    load_model(args.checkpoint, generator, discriminator, optimizer_gen, optimizer_dis, device)
+
+    if args.checkpoint:
+        start_epoch = int(re.sub(r'*epoch', '', args.checkpoint)) + 1
+    else:
+        start_epoch = 1
+
+    for epoch in range(start_epoch, start_epoch + args.epochs + 1):
         generator.train()
         discriminator.train()
 
