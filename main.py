@@ -114,8 +114,8 @@ def train_gan(dataloader, generator, gen_optimizer, discriminator, disc_optimize
     print(f'Starting epoch {epoch} out of {args.epochs}')
 
     for index, (low_res, high_res) in enumerate(tqdm(dataloader)):
-        high_res.to(device)
-        low_res.to(device)
+        high_res = high_res.to(device)
+        low_res = low_res.to(device)
         batch_size = low_res.size(0)
 
         real_label = torch.full((batch_size, 1), 1, dtype=low_res.dtype).to(device)
@@ -127,7 +127,7 @@ def train_gan(dataloader, generator, gen_optimizer, discriminator, disc_optimize
 
         disc_loss_real = bce_loss(discriminator(high_res), real_label)
         disc_loss_fake = bce_loss(discriminator(super_res.detach()), fake_label)
-        disc_loss = disc_loss + disc_loss_fake
+        disc_loss = disc_loss_real + disc_loss_fake
 
         disc_loss.backward()
         disc_optimizer.step()
@@ -159,7 +159,7 @@ def main():
     disc_scheduler = torch.optim.lr_scheduler.StepLR(disc_optimizer, step_size=args.epochs // 2, gamma=0.1)
     gen_scheduler = torch.optim.lr_scheduler.StepLR(gen_optimizer, step_size=args.epochs // 2, gamma=0.1)
 
-    train_data = TrainData(args.train_dir, crop_size=128, upscale_factor=4)
+    train_data = TrainData(args.train_dir, crop_size=96, upscale_factor=4)
     train_loader = DataLoader(dataset=train_data, num_workers=2, batch_size=args.batch_size, shuffle=True)
     val_data = ValData(args.val_dir, upscale_factor=4)
     val_loader = DataLoader(dataset=val_data, num_workers=1, batch_size=1, shuffle=False)
@@ -170,6 +170,8 @@ def main():
 
         train_psnr(train_loader, generator, mse_loss, psnr_optimizer, epoch, device, args)
         validate(generator, val_loader, epoch, device, output='psnr.pth')
+
+    generator.load_state_dict(torch.load('psnr.pth'))
 
     for epoch in range(args.epochs):
         generator.train()

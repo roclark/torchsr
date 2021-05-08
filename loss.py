@@ -14,3 +14,4 @@ class VGGLoss(nn.Module):
 
     def forward(self, source, target):
         loss = torch.nn.functional.l1_loss(self.features(source), self.features(target))
+        return loss
