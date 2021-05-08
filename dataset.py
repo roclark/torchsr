@@ -5,6 +5,8 @@ from torchvision.transforms import (CenterCrop,
                                     Compose,
                                     Normalize,
                                     RandomCrop,
+                                    RandomHorizontalFlip,
+                                    RandomVerticalFlip,
                                     Resize,
                                     ToPILImage,
                                     ToTensor)
@@ -30,17 +32,24 @@ class TrainData(Dataset):
     def __init__(self, dataset, crop_size, upscale_factor):
         super(TrainData, self).__init__()
         self.images = image_dataset(dataset)
-        self.preprocess_high_res = Compose([CenterCrop(384),
-                                            RandomCrop(crop_size),
-                                            ToTensor()])
-        self.preprocess_low_res = Compose([ToPILImage(),
-                                           Resize(crop_size // upscale_factor,
-                                                  interpolation=Image.BICUBIC),
-                                           ToTensor()])
+
+        self.lr_transform = Compose([
+            ToPILImage(),
+            Resize((crop_size // upscale_factor, crop_size // upscale_factor), interpolation=Image.BICUBIC),
+            ToTensor()
+        ])
+        self.hr_transform = Compose([
+            RandomCrop((crop_size, crop_size)),
+            RandomHorizontalFlip(),
+            RandomVerticalFlip(),
+            ToTensor()
+        ])
 
     def __getitem__(self, index):
-        high_res = self.preprocess_high_res(Image.open(self.images[index]))
-        low_res = self.preprocess_low_res(high_res)
+        image = Image.open(self.images[index])
+
+        high_res = self.hr_transform(image)
+        low_res = self.lr_transform(high_res)
         return low_res, high_res
 
     def __len__(self):
@@ -48,21 +57,33 @@ class TrainData(Dataset):
 
 
 class ValData(Dataset):
-    def __init__(self, dataset, upscale_factor):
+    def __init__(self, dataset, crop_size=96, upscale_factor=4):
         super(ValData, self).__init__()
         self.upscale_factor = upscale_factor
         self.images = image_dataset(dataset)
 
+        self.lr_transform = Compose([
+            ToPILImage(),
+            Resize((crop_size // upscale_factor, crop_size // upscale_factor), interpolation=Image.BICUBIC),
+            ToTensor()
+        ])
+        self.bicubic = Compose([
+            ToPILImage(),
+            Resize((crop_size, crop_size), interpolation=Image.BICUBIC),
+            ToTensor()
+        ])
+        self.hr_transform = Compose([
+            RandomCrop((crop_size, crop_size)),
+            ToTensor()
+        ])
+
     def __getitem__(self, index):
-        high_res = Image.open(self.images[index])
-        crop_size = 128
-        lr_scale = Resize(crop_size // self.upscale_factor, interpolation=Image.BICUBIC)
-        hr_scale = Resize(crop_size, interpolation=Image.BICUBIC)
-        high_res = CenterCrop(crop_size)(high_res)
-        low_res = lr_scale(high_res)
-        high_res_restore = hr_scale(low_res)
-        norm = ToTensor()
-        return norm(low_res), norm(high_res_restore), norm(high_res)
+        image = Image.open(self.images[index])
+
+        high_res = self.hr_transform(image)
+        low_res = self.lr_transform(high_res)
+        bicubic = self.bicubic(low_res)
+        return low_res, bicubic, high_res
 
     def __len__(self):
         return len(self.images)
