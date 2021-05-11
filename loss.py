@@ -21,7 +21,7 @@ class VGGLoss(nn.Module):
         model = torchvision.models.vgg19(pretrained=True)
         self.features = torch.nn.Sequential(*list(model.features.children())[:feature_layer]).eval()
 
-        for name, param in self.features.named_parameters():
+        for _, param in self.features.named_parameters():
             param.requires_grad = False
 
     def forward(self, source, target):

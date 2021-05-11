@@ -13,9 +13,7 @@
 import os
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import (CenterCrop,
-                                    Compose,
-                                    Normalize,
+from torchvision.transforms import (Compose,
                                     RandomCrop,
                                     RandomHorizontalFlip,
                                     RandomVerticalFlip,
