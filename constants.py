@@ -11,7 +11,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 BATCH_SIZE = 64
-EPOCHS = 100
+EPOCHS = 1000
+PRE_EPOCHS = 1000
 
 TRAIN_DIR = 'dataset/train'
 TEST_DIR = 'dataset/val'

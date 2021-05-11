@@ -34,6 +34,9 @@ def parse_args():
     parser.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)
+    parser.add_argument('--pretrain-epochs', help='The number of epochs to '
+                        'run pretraining for. Default: {PRE_EPOCHS}.',
+                        type=int, default=PRE_EPOCHS)
     parser.add_argument('--train-dir', help='Specify the location to the '
                         'directory where training images are stored. Default: '
                         f'{TRAIN_DIR}.', type=str, default=TRAIN_DIR)
@@ -81,9 +84,9 @@ def validate(generator, val_loader, epoch, device, output):
 
 
 def train_psnr(dataloader, generator, mse_loss, optimizer, epoch, device, args):
-    print(f'Starting epoch {epoch} out of {args.epochs}')
+    print(f'Starting epoch {epoch} out of {args.pretrain_epochs}')
 
-    for index, (low_res, high_res) in enumerate(tqdm(dataloader)):
+    for _, (low_res, high_res) in enumerate(tqdm(dataloader)):
         high_res = high_res.to(device)
         low_res = low_res.to(device)
 
@@ -98,7 +101,7 @@ def train_psnr(dataloader, generator, mse_loss, optimizer, epoch, device, args):
 def train_gan(dataloader, generator, gen_optimizer, discriminator, disc_optimizer, vgg_loss, bce_loss, epoch, device, args):
     print(f'Starting epoch {epoch} out of {args.epochs}')
 
-    for index, (low_res, high_res) in enumerate(tqdm(dataloader)):
+    for _, (low_res, high_res) in enumerate(tqdm(dataloader)):
         high_res = high_res.to(device)
         low_res = low_res.to(device)
         batch_size = low_res.size(0)
