@@ -20,6 +20,7 @@ from torchvision.transforms import (Compose,
                                     Resize,
                                     ToPILImage,
                                     ToTensor)
+from torchvision.transforms.functional import InterpolationMode
 
 
 SUPPORTED_IMAGES = ('.jpg', '.jpeg', '.png')
@@ -45,7 +46,7 @@ class TrainData(Dataset):
 
         self.lr_transform = Compose([
             ToPILImage(),
-            Resize((crop_size // upscale_factor, crop_size // upscale_factor), interpolation=Image.BICUBIC),
+            Resize((crop_size // upscale_factor, crop_size // upscale_factor), interpolation=InterpolationMode.BICUBIC),
             ToTensor()
         ])
         self.hr_transform = Compose([
@@ -74,7 +75,7 @@ class TestData(Dataset):
 
         self.lr_transform = Compose([
             ToPILImage(),
-            Resize((crop_size // upscale_factor, crop_size // upscale_factor), interpolation=Image.BICUBIC),
+            Resize((crop_size // upscale_factor, crop_size // upscale_factor), interpolation=InterpolationMode.BICUBIC),
             ToTensor()
         ])
         self.bicubic = Compose([

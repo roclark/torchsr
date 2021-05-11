@@ -12,8 +12,10 @@
 # limitations under the License.
 import torch
 import torch.optim as optim
+from torchvision.transforms.transforms import ToTensor
 import torchvision.utils as utils
 from math import log10
+from PIL import Image
 from torch import nn
 from tqdm import tqdm
 
@@ -33,6 +35,12 @@ class SRGANTrainer:
         self.train_loader = train_loader
 
         self._initialize_trainer()
+        self._create_test_image()
+
+    def _create_test_image(self):
+        image = Image.open('media/waterfalls-low-res.jpg')
+        image = ToTensor()(image)
+        self.test_image = image.unsqueeze(0).to(self.device)
 
     def _initialize_models(self):
         self.generator = Generator().to(self.device)
@@ -76,7 +84,6 @@ class SRGANTrainer:
         self._initialize_optimizers()
 
     def _test(self, epoch, output):
-        test_images = []
         self.generator.eval()
 
         print(f'Testing results after epoch {epoch}')
@@ -84,17 +91,13 @@ class SRGANTrainer:
         with torch.no_grad():
             psnr = 0.0
 
-            for low_res, bicubic, high_res in tqdm(self.test_loader):
+            for low_res, _, high_res in tqdm(self.test_loader):
                 low_res = low_res.to(self.device)
                 high_res = high_res.to(self.device)
 
                 super_res = self.generator(low_res).to(self.device)
 
                 psnr += 10 * log10(1 / ((super_res - high_res) ** 2).mean().item())
-                test_images.extend([to_image()(bicubic.data.cpu().squeeze(0)),
-                                    to_image()(high_res.data.cpu().squeeze(0)),
-                                    to_image()(super_res.data.cpu().squeeze(0))])
-
             psnr = psnr / len(self.test_loader)
             print(f'PSNR: {round(psnr, 3)}')
 
@@ -102,12 +105,10 @@ class SRGANTrainer:
                 self.best_psnr = psnr
                 torch.save(self.generator.state_dict(), output)
 
-            test_images = torch.stack(test_images)
-            test_images = torch.chunk(test_images, test_images.size(0) // 3)
-
-            for index, image in enumerate(test_images):
-                image = utils.make_grid(image, nrow=3, padding=5)
-                utils.save_image(image, f'output/epoch_{epoch}_val_{index}.png', padding=5)
+            # Save a copy of a single image that has been super-resed for easy
+            # tracking of progress.
+            super_res = self.generator(self.test_image).to(self.device)
+            utils.save_image(super_res, f'output/SR_epoch{epoch}.jpg', padding=5)
 
     def _pretrain(self):
         print('Starting pre-training')
