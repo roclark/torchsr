@@ -12,14 +12,14 @@
 # limitations under the License.
 import torch
 import torch.optim as optim
-from torchvision.transforms.transforms import ToTensor
 import torchvision.utils as utils
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.transforms.transforms import ToPILImage, ToTensor
 from math import log10
 from PIL import Image
 from torch import nn
 from tqdm import tqdm
 
-from dataset import to_image
 from discriminator import Discriminator
 from generator import Generator
 from loss import VGGLoss
@@ -33,6 +33,7 @@ class SRGANTrainer:
         self.pre_epochs = args.pretrain_epochs
         self.test_loader = test_loader
         self.train_loader = train_loader
+        self.writer = SummaryWriter()
 
         self._initialize_trainer()
         self._create_test_image()
@@ -100,6 +101,8 @@ class SRGANTrainer:
                 psnr += 10 * log10(1 / ((super_res - high_res) ** 2).mean().item())
             psnr = psnr / len(self.test_loader)
             print(f'PSNR: {round(psnr, 3)}')
+            phase = output.rstrip('.pth')
+            self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
 
             if psnr > self.best_psnr:
                 self.best_psnr = psnr
@@ -109,6 +112,8 @@ class SRGANTrainer:
             # tracking of progress.
             super_res = self.generator(self.test_image).to(self.device)
             utils.save_image(super_res, f'output/SR_epoch{epoch}.jpg', padding=5)
+            output_image = utils.make_grid(super_res)
+            self.writer.add_image(f'images/epoch{epoch}', output_image)
 
     def _pretrain(self):
         print('Starting pre-training')
