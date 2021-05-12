@@ -106,7 +106,7 @@ def train_dataset(train_directory, batch_size, crop_size=96, upscale_factor=4):
                            upscale_factor=upscale_factor)
     trainloader = DataLoader(
         dataset=train_data,
-        num_workers=2,
+        num_workers=16,
         batch_size=batch_size,
         shuffle=True
     )
