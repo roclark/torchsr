@@ -13,6 +13,7 @@
 import os
 from PIL import Image
 from torch import Tensor
+from torch.utils import data
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import (Compose,
                                     RandomCrop,
@@ -76,10 +77,14 @@ class TrainData(Dataset):
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    dataset_multiplier : int
+        An ``int`` of the amount to augment the dataset to increase the number
+        of samples per image.
     """
-    def __init__(self, dataset: str, crop_size: int, upscale_factor: int) -> None:
+    def __init__(self, dataset: str, crop_size: int, upscale_factor: int,
+                 dataset_multiplier: int) -> None:
         super(TrainData, self).__init__()
-        self.images = _image_dataset(dataset)
+        self.images = _image_dataset(dataset) * dataset_multiplier
 
         self.lr_transform = Compose([
             ToPILImage(),
@@ -222,7 +227,8 @@ class TestData(Dataset):
 
 
 def train_dataset(train_directory: str, batch_size: int, crop_size: int = 96,
-                  upscale_factor: int = 4) -> DataLoader:
+                  upscale_factor: int = 4,
+                  dataset_multiplier: int = 1) -> DataLoader:
     """
     Build a training dataset based on the input directory.
 
@@ -243,6 +249,9 @@ def train_dataset(train_directory: str, batch_size: int, crop_size: int = 96,
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    dataset_multiplier : int
+        An ``int`` of the amount to augment the dataset to increase the number
+        of samples per image.
 
     Returns
     -------
@@ -251,7 +260,8 @@ def train_dataset(train_directory: str, batch_size: int, crop_size: int = 96,
     """
     train_data = TrainData(train_directory,
                            crop_size=crop_size,
-                           upscale_factor=upscale_factor)
+                           upscale_factor=upscale_factor,
+                           dataset_multiplier=dataset_multiplier)
     trainloader = DataLoader(
         dataset=train_data,
         num_workers=16,

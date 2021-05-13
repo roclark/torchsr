@@ -11,12 +11,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
 from constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR, TEST_DIR
 from dataset import test_dataset, train_dataset
 from trainer import SRGANTrainer
 from version import VERSION
+
+
+def positive_integer(value: str) -> int:
+    """
+    Determine if a number is a positive integer.
+
+    Some arguments need to be a positive integer to function properly. Check
+    if the input is a valid number and force it to an integer before checking
+    if it is greater than zero. If any checks fail, raise an ArgumentTypeError.
+
+    Parameters
+    ----------
+    value : str
+        A ``string`` of the input passed by the user.
+
+    Returns
+    -------
+    int
+        Returns an ``int`` of the positive integer passed by the user.
+
+    Raises
+    ------
+    ArgumentTypeError
+        Raises an ``ArgumentTypeError`` if the input is not an integer or if
+        the number is not greater than zero.
+    """
+    try:
+        int_value = int(value)
+    except TypeError:
+        raise ArgumentTypeError(f'invalid int value: \'{value}\'')
+    if int_value < 1:
+        raise ArgumentTypeError('dataset-multiplier must be a positive '
+                                'integer!')
+    return int_value
 
 
 def parse_args() -> Namespace:
@@ -36,6 +70,15 @@ def parse_args() -> Namespace:
     parser.add_argument('--batch-size', help='The number of images to include '
                         f'in every batch. Default: {BATCH_SIZE}.', type=int,
                         default=BATCH_SIZE)
+    parser.add_argument('--dataset-multiplier', help='Artificially increase '
+                        'the size of the dataset by taking N number of random '
+                        'samples from each image in the training dataset. The '
+                        'default behavior is to take a single random square '
+                        'subsection of each image, but depending on the '
+                        'size of the subsection and the overall image size, '
+                        'this could ignore over 99%% of the image. To increase '
+                        'the number of samples per image, use a multiplier '
+                        'greater than 1.', type=positive_integer, default=1)
     parser.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)
@@ -55,7 +98,8 @@ def main() -> None:
     args = parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    train_loader = train_dataset(args.train_dir, batch_size=args.batch_size)
+    train_loader = train_dataset(args.train_dir, batch_size=args.batch_size,
+                                 dataset_multiplier=args.dataset_multiplier)
     test_loader = test_dataset(args.test_dir)
 
     trainer = SRGANTrainer(device, args, train_loader, test_loader)
