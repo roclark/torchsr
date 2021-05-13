@@ -12,11 +12,20 @@
 # limitations under the License.
 import torch
 import torchvision
-from torch import nn
+from torch import nn, Tensor
 
 
 class VGGLoss(nn.Module):
-    def __init__(self, feature_layer=36):
+    """
+    Calculate loss based on the official pre-trained VGG19 model from
+    torchvision.
+
+    Parameters
+    ----------
+    feature_layer : int
+        An ``int`` of the number of features to pull from the model.
+    """
+    def __init__(self, feature_layer: int = 36) -> None:
         super(VGGLoss, self).__init__()
         model = torchvision.models.vgg19(pretrained=True)
         self.features = torch.nn.Sequential(*list(model.features.children())[:feature_layer]).eval()
@@ -24,6 +33,22 @@ class VGGLoss(nn.Module):
         for _, param in self.features.named_parameters():
             param.requires_grad = False
 
-    def forward(self, source, target):
-        loss = torch.nn.functional.l1_loss(self.features(source), self.features(target))
+    def forward(self, source: Tensor, target: Tensor) -> float:
+        """
+        Calculate the loss using the pre-trained VGG19 model.
+
+        Parameters
+        ----------
+        source : Tensor
+            A ``tensor`` of the generated upscaled image.
+        target : Tensor
+            A ``tensor`` of the high resolution source image.
+
+        Returns
+        -------
+        float
+            Returns a ``float`` of the calculated loss.
+        """
+        loss = torch.nn.functional.l1_loss(self.features(source),
+                                           self.features(target))
         return loss

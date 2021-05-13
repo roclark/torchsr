@@ -12,7 +12,7 @@
 # limitations under the License.
 import math
 import torch
-from torch import nn
+from torch import nn, Tensor
 
 from residual import ResidualBlock, SubpixelConvolutionLayer
 
@@ -21,7 +21,16 @@ NUM_RESIDUAL = 16
 
 
 class Generator(nn.Module):
-    def __init__(self, scale_factor=4):
+    """
+    Generator to create a new image with the requested upscaling.
+
+    Parameters
+    ----------
+    scale_factor : int
+        An ``int`` of the amount the image should be upscaled in each
+        direction.
+    """
+    def __init__(self, scale_factor: int = 4) -> None:
         super(Generator, self).__init__()
         num_conv_layers = int(math.log(scale_factor, 2))
 
@@ -48,7 +57,21 @@ class Generator(nn.Module):
 
         self.conv3 = nn.Conv2d(64, 3, kernel_size=9, stride=1, padding=4)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Complete a forward pass of the generator.
+
+        Parameters
+        ----------
+        x : Tensor
+            A ``tensor`` representing a single batch of images.
+
+        Returns
+        -------
+        Tensor
+            Returns a ``tensor`` of the final output from the last
+            convolutional layer.
+        """
         conv1 = self.conv1(x)
         block = self.blocks(conv1)
         conv2 = self.conv2(block)

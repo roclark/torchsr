@@ -11,11 +11,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-from torch import nn
+from torch import nn, Tensor
 
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size=96):
+    """
+    Discriminator to classify whether the generated image is real or not.
+
+    Parameters
+    ----------
+    image_size : int
+        The size of the input image in pixels for both height and width.
+    """
+    def __init__(self, image_size: int = 96) -> None:
         super(Discriminator, self).__init__()
 
         feature_map_size = int(image_size // 16)
@@ -60,7 +68,20 @@ class Discriminator(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Complete a forward pass of the discriminator.
+
+        Parameters
+        ----------
+        x : Tensor
+            A ``tensor`` representing a single batch of images.
+
+        Returns
+        -------
+        Tensor
+            Returns a ``tensor`` of the final output from the classifier.
+        """
         out = self.features(x)
         out = torch.flatten(out, 1)
         out = self.classifier(out)

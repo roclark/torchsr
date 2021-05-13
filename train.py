@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 
 from constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR, TEST_DIR
 from dataset import test_dataset, train_dataset
@@ -19,7 +19,19 @@ from trainer import SRGANTrainer
 from version import VERSION
 
 
-def parse_args():
+def parse_args() -> Namespace:
+    """
+    Parse arguments.
+
+    Parse optional arguments passed to the application during runtime and
+    return the results.
+
+    Returns
+    -------
+    Namespace
+        Returns a ``Namespace`` containing all of the arguments passed by the
+        user including defaults.
+    """
     parser = ArgumentParser(f'torchSR Version: {VERSION}')
     parser.add_argument('--batch-size', help='The number of images to include '
                         f'in every batch. Default: {BATCH_SIZE}.', type=int,
@@ -39,7 +51,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     args = parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
