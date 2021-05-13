@@ -39,7 +39,7 @@ class SRGANTrainer:
         self._create_test_image()
 
     def _create_test_image(self):
-        image = Image.open('media/waterfalls-low-res.jpg')
+        image = Image.open('media/waterfalls-low-res.png')
         image = ToTensor()(image)
         self.test_image = image.unsqueeze(0).to(self.device)
 
@@ -111,7 +111,7 @@ class SRGANTrainer:
             # Save a copy of a single image that has been super-resed for easy
             # tracking of progress.
             super_res = self.generator(self.test_image).to(self.device)
-            utils.save_image(super_res, f'output/SR_epoch{epoch}.jpg', padding=5)
+            utils.save_image(super_res, f'output/SR_epoch{epoch}.png', padding=5)
             output_image = utils.make_grid(super_res)
             self.writer.add_image(f'images/epoch{epoch}', output_image)
 
