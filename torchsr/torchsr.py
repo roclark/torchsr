@@ -13,10 +13,10 @@
 import torch
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
-from constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR
-from dataset import initialize_datasets
-from trainer import SRGANTrainer
-from version import VERSION
+from torchsr.constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR
+from torchsr.dataset import initialize_datasets
+from torchsr.trainer import SRGANTrainer
+from torchsr.__version__ import VERSION
 
 
 def positive_integer(value: str) -> int:
@@ -105,5 +105,5 @@ def main() -> None:
     trainer.train()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

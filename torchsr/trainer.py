@@ -16,7 +16,10 @@ import torchvision.utils as utils
 from argparse import Namespace
 from torch import Tensor
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
 from torchvision.transforms.functional import InterpolationMode
 from torchvision.transforms.transforms import Resize, ToTensor
 from math import log10
@@ -24,9 +27,9 @@ from PIL import Image
 from torch import nn
 from tqdm import tqdm
 
-from discriminator import Discriminator
-from generator import Generator
-from loss import VGGLoss
+from torchsr.discriminator import Discriminator
+from torchsr.generator import Generator
+from torchsr.loss import VGGLoss
 
 
 class SRGANTrainer:
@@ -56,7 +59,10 @@ class SRGANTrainer:
         self.pre_epochs = args.pretrain_epochs
         self.test_loader = test_loader
         self.train_loader = train_loader
-        self.writer = SummaryWriter()
+        if SummaryWriter:
+            self.writer = SummaryWriter()
+        else:
+            self.writer = None
 
         self._initialize_trainer()
         self._create_test_image()
@@ -160,7 +166,8 @@ class SRGANTrainer:
             psnr = psnr / len(self.test_loader)
             print(f'PSNR: {round(psnr, 3)}')
             phase = output.rstrip('.pth')
-            self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
+            if self.writer:
+                self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
 
             if psnr > self.best_psnr:
                 self.best_psnr = psnr
@@ -174,7 +181,8 @@ class SRGANTrainer:
             output_image = Resize((height // 4, width // 4),
                                   interpolation=InterpolationMode.BICUBIC)(super_res)
             output_image = utils.make_grid(output_image)
-            self.writer.add_image(f'images/epoch{epoch}', output_image)
+            if self.writer:
+                self.writer.add_image(f'images/epoch{epoch}', output_image)
 
     def _pretrain(self) -> None:
         """

@@ -14,7 +14,7 @@ import math
 import torch
 from torch import nn, Tensor
 
-from residual import ResidualBlock, SubpixelConvolutionLayer
+from torchsr.residual import ResidualBlock, SubpixelConvolutionLayer
 
 
 NUM_RESIDUAL = 16
