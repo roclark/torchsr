@@ -13,8 +13,8 @@
 import torch
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
-from constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR, TEST_DIR
-from dataset import test_dataset, train_dataset
+from constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR
+from dataset import initialize_datasets
 from trainer import SRGANTrainer
 from version import VERSION
 
@@ -88,9 +88,6 @@ def parse_args() -> Namespace:
     parser.add_argument('--train-dir', help='Specify the location to the '
                         'directory where training images are stored. Default: '
                         f'{TRAIN_DIR}.', type=str, default=TRAIN_DIR)
-    parser.add_argument('--test-dir', help='Specify the location to the '
-                        'diredctory where validation images are stored. '
-                        f'Default: {TEST_DIR}.', type=str, default=TEST_DIR)
     return parser.parse_args()
 
 
@@ -98,9 +95,11 @@ def main() -> None:
     args = parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    train_loader = train_dataset(args.train_dir, batch_size=args.batch_size,
-                                 dataset_multiplier=args.dataset_multiplier)
-    test_loader = test_dataset(args.test_dir)
+    train_loader, test_loader = initialize_datasets(
+        args.train_dir,
+        batch_size=args.batch_size,
+        dataset_multiplier=args.dataset_multiplier
+    )
 
     trainer = SRGANTrainer(device, args, train_loader, test_loader)
     trainer.train()

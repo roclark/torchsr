@@ -15,4 +15,3 @@ EPOCHS = 1000
 PRE_EPOCHS = 1000
 
 TRAIN_DIR = 'dataset/train'
-TEST_DIR = 'dataset/val'

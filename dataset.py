@@ -12,6 +12,7 @@
 # limitations under the License.
 import os
 from PIL import Image
+from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils import data
 from torch.utils.data import DataLoader, Dataset
@@ -67,9 +68,8 @@ class TrainData(Dataset):
 
     Parameters
     ----------
-    dataset : str
-        A ``string`` of the path to the directory containing images to be used
-        for training.
+    dataset : list
+        A ``list`` of the full paths of images to be used for training.
     crop_size : int
         An ``int`` of the size to crop the high resolution images to in pixels.
         The size is used for both the height and width, ie. a crop_size of `96`
@@ -84,7 +84,7 @@ class TrainData(Dataset):
     def __init__(self, dataset: str, crop_size: int, upscale_factor: int,
                  dataset_multiplier: int) -> None:
         super(TrainData, self).__init__()
-        self.images = _image_dataset(dataset) * dataset_multiplier
+        self.images = dataset * dataset_multiplier
 
         self.lr_transform = Compose([
             ToPILImage(),
@@ -154,9 +154,8 @@ class TestData(Dataset):
 
     Parameters
     ----------
-    dataset : str
-        A ``string`` of the path to the directory containing images to be used
-        for testing.
+    dataset : list
+        A ``list`` of the full paths of images to be used for testing.
     crop_size : int
         An ``int`` of the size to crop the high resolution images to in pixels.
         The size is used for both the height and width, ie. a crop_size of `96`
@@ -165,10 +164,10 @@ class TestData(Dataset):
         An ``int`` of the amount the image should be upscaled in each
         direction.
     """
-    def __init__(self, dataset: str, crop_size: int = 96, upscale_factor: int = 4) -> None:
+    def __init__(self, dataset: list, crop_size: int = 96, upscale_factor: int = 4) -> None:
         super(TestData, self).__init__()
         self.upscale_factor = upscale_factor
-        self.images = _image_dataset(dataset)
+        self.images = dataset
 
         self.lr_transform = Compose([
             ToPILImage(),
@@ -226,7 +225,7 @@ class TestData(Dataset):
         return len(self.images)
 
 
-def train_dataset(train_directory: str, batch_size: int, crop_size: int = 96,
+def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
                   upscale_factor: int = 4,
                   dataset_multiplier: int = 1) -> DataLoader:
     """
@@ -234,6 +233,85 @@ def train_dataset(train_directory: str, batch_size: int, crop_size: int = 96,
 
     Create a PyTorch DataLoader instance with multiple pipelined workers to
     reduce data reading and processing bottlenecks.
+
+    Parameters
+    ----------
+    train_subset : list
+        A ``list`` of images to be used in the training dataset.
+    batch_size : int
+        An ``int`` of the number of images to include in each batch during
+        training.
+    crop_size : int
+        An ``int`` of the size to crop the high resolution images to in pixels.
+        The size is used for both the height and width, ie. a crop_size of `96`
+        will take a 96x96 section of the input image.
+    upscale_factor : int
+        An ``int`` of the amount the image should be upscaled in each
+        direction.
+    dataset_multiplier : int
+        An ``int`` of the amount to augment the dataset to increase the number
+        of samples per image.
+
+    Returns
+    -------
+    DataLoader
+        Returns a ``DataLoader`` instance of the training dataset.
+    """
+    train_data = TrainData(train_subset,
+                           crop_size=crop_size,
+                           upscale_factor=upscale_factor,
+                           dataset_multiplier=dataset_multiplier)
+    trainloader = DataLoader(
+        dataset=train_data,
+        num_workers=16,
+        batch_size=batch_size,
+        shuffle=True
+    )
+    return trainloader
+
+
+def _test_dataset(test_subset: list,
+                 upscale_factor: int = 4) -> DataLoader:
+    """
+    Build a testing dataset based on the input directory.
+
+    Create a PyTorch DataLoader instance to be used to test the latest model
+    after each epoch.
+
+    Parameters
+    ----------
+    test_subset : list
+        A ``list`` of images to be used in the testing dataset.
+    upscale_factor : int
+        An ``int`` of the amount the image should be upscaled in each
+        direction.
+
+    Returns
+    -------
+    DataLoader
+        Returns a ``DataLoader`` instance of the testing dataset.
+    """
+    test_data = TestData(test_subset, upscale_factor=upscale_factor)
+    testloader = DataLoader(
+        dataset=test_data,
+        num_workers=1,
+        batch_size=1,
+        shuffle=False
+    )
+    return testloader
+
+
+def initialize_datasets(train_directory: str, batch_size: int,
+                        crop_size: int = 96, upscale_factor: int = 4,
+                        dataset_multiplier: int = 1) -> Tuple[DataLoader, DataLoader]:
+    """
+    Initialize testing and training datasets.
+
+    Given a directory full of high quality sample images, randomly divide the
+    directory up so 90% of the images are in the training dataset and the
+    remaining 10% are in the testing dataset. The datasets are then converted
+    to PyTorch DataLoaders which are used to efficiently iterate through the
+    images.
 
     Parameters
     ----------
@@ -255,48 +333,16 @@ def train_dataset(train_directory: str, batch_size: int, crop_size: int = 96,
 
     Returns
     -------
-    DataLoader
-        Returns a ``DataLoader`` instance of the training dataset.
+    Tuple
+        Returns a ``tuple`` comprised of the training and testing DataLoaders,
+        respectively.
     """
-    train_data = TrainData(train_directory,
-                           crop_size=crop_size,
-                           upscale_factor=upscale_factor,
-                           dataset_multiplier=dataset_multiplier)
-    trainloader = DataLoader(
-        dataset=train_data,
-        num_workers=16,
-        batch_size=batch_size,
-        shuffle=True
-    )
-    return trainloader
-
-
-def test_dataset(test_directory: str,
-                 upscale_factor: int = 4) -> DataLoader:
-    """
-    Build a testing dataset based on the input directory.
-
-    Create a PyTorch DataLoader instance to be used to test the latest model
-    after each epoch.
-
-    Parameters
-    ----------
-    test_directory : str
-        A ``string`` of the directory containing supported images.
-    upscale_factor : int
-        An ``int`` of the amount the image should be upscaled in each
-        direction.
-
-    Returns
-    -------
-    DataLoader
-        Returns a ``DataLoader`` instance of the testing dataset.
-    """
-    test_data = TestData(test_directory, upscale_factor=upscale_factor)
-    testloader = DataLoader(
-        dataset=test_data,
-        num_workers=1,
-        batch_size=1,
-        shuffle=False
-    )
-    return testloader
+    dataset = _image_dataset(train_directory)
+    train_data, test_data = train_test_split(dataset, test_size=0.1,
+                                             shuffle=True)
+    trainloader = _train_dataset(train_data, batch_size=batch_size,
+                                 crop_size=crop_size,
+                                 upscale_factor=upscale_factor,
+                                 dataset_multiplier=dataset_multiplier)
+    testloader = _test_dataset(test_data, upscale_factor=upscale_factor)
+    return trainloader, testloader
