@@ -17,7 +17,8 @@ from argparse import Namespace
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.transforms.transforms import ToPILImage, ToTensor
+from torchvision.transforms.functional import InterpolationMode
+from torchvision.transforms.transforms import Resize, ToTensor
 from math import log10
 from PIL import Image
 from torch import nn
@@ -169,7 +170,10 @@ class SRGANTrainer:
             # tracking of progress.
             super_res = self.generator(self.test_image).to(self.device)
             utils.save_image(super_res, f'output/SR_epoch{epoch}.png', padding=5)
-            output_image = utils.make_grid(super_res)
+            _, _, height, width = super_res.shape
+            output_image = Resize((height // 4, width // 4),
+                                  interpolation=InterpolationMode.BICUBIC)(super_res)
+            output_image = utils.make_grid(output_image)
             self.writer.add_image(f'images/epoch{epoch}', output_image)
 
     def _pretrain(self) -> None:
