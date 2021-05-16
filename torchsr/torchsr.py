@@ -15,6 +15,7 @@ from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
 from torchsr.constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR
 from torchsr.dataset import initialize_datasets
+from torchsr.test import test
 from torchsr.trainer import SRGANTrainer
 from torchsr.__version__ import VERSION
 
@@ -67,10 +68,14 @@ def parse_args() -> Namespace:
         user including defaults.
     """
     parser = ArgumentParser(f'torchSR Version: {VERSION}')
-    parser.add_argument('--batch-size', help='The number of images to include '
+    commands = parser.add_subparsers(dest='function', metavar='function',
+                                     required=True)
+    train = commands.add_parser('train', help='Train an SRGAN model against an HD '
+                                'dataset.')
+    train.add_argument('--batch-size', help='The number of images to include '
                         f'in every batch. Default: {BATCH_SIZE}.', type=int,
                         default=BATCH_SIZE)
-    parser.add_argument('--dataset-multiplier', help='Artificially increase '
+    train.add_argument('--dataset-multiplier', help='Artificially increase '
                         'the size of the dataset by taking N number of random '
                         'samples from each image in the training dataset. The '
                         'default behavior is to take a single random square '
@@ -79,30 +84,37 @@ def parse_args() -> Namespace:
                         'this could ignore over 99%% of the image. To increase '
                         'the number of samples per image, use a multiplier '
                         'greater than 1.', type=positive_integer, default=1)
-    parser.add_argument('--epochs', help='The number of epochs to run '
+    train.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)
-    parser.add_argument('--pretrain-epochs', help='The number of epochs to '
+    train.add_argument('--pretrain-epochs', help='The number of epochs to '
                         'run pretraining for. Default: {PRE_EPOCHS}.',
                         type=int, default=PRE_EPOCHS)
-    parser.add_argument('--train-dir', help='Specify the location to the '
+    train.add_argument('--train-dir', help='Specify the location to the '
                         'directory where training images are stored. Default: '
                         f'{TRAIN_DIR}.', type=str, default=TRAIN_DIR)
+
+    test = commands.add_parser('test', help='Generated a super resolution '
+                               'image based on a trained SRGAN model.')
+    test.add_argument('image', type=str, help='Filename of image to upres.')
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    if args.function == 'test':
+        test(args, device)
+    else:
+        train_loader, test_loader = initialize_datasets(
+            args.train_dir,
+            batch_size=args.batch_size,
+            dataset_multiplier=args.dataset_multiplier
+        )
 
-    train_loader, test_loader = initialize_datasets(
-        args.train_dir,
-        batch_size=args.batch_size,
-        dataset_multiplier=args.dataset_multiplier
-    )
-
-    trainer = SRGANTrainer(device, args, train_loader, test_loader)
-    trainer.train()
+        trainer = SRGANTrainer(device, args, train_loader, test_loader)
+        trainer.train()
 
 
 if __name__ == '__main__':
