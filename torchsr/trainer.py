@@ -15,6 +15,7 @@ import torch.optim as optim
 import torchvision.utils as utils
 from argparse import Namespace
 from torch import Tensor
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -50,15 +51,26 @@ class SRGANTrainer:
         A ``DataLoader`` of all images in the training dataset.
     test_loader : DataLoader
         A ``DataLoader`` of all images in the testing dataset.
+    distributed : bool
+        A ``boolean`` which evalutes to `True` if the training is distributed.
     """
     def __init__(self, device: str, args: Namespace, train_loader: DataLoader,
-                 test_loader: DataLoader) -> None:
+                 test_loader: DataLoader, distributed=False) -> None:
         self.best_psnr = -1.0
         self.device = device
+        self.distributed = distributed
         self.epochs = args.epochs
+        self.local_rank = args.local_rank
         self.pre_epochs = args.pretrain_epochs
         self.test_loader = test_loader
         self.train_loader = train_loader
+        # For using a single process, the default rank is -1 for the first and
+        # only process.
+        self.main_process = args.local_rank in [-1, 0]
+
+        if device == torch.device('cuda'):
+            torch.cuda.set_device(args.local_rank)
+
         if SummaryWriter:
             self.writer = SummaryWriter()
         else:
@@ -81,6 +93,22 @@ class SRGANTrainer:
         """
         self.generator = Generator().to(self.device)
         self.discriminator = Discriminator().to(self.device)
+        if self.distributed:
+            self.generator = DDP(
+                self.generator,
+                device_ids=[self.local_rank],
+                output_device=self.local_rank
+            )
+            self.discriminator = DDP(
+                self.discriminator,
+                device_ids=[self.local_rank],
+                output_device=self.local_rank,
+                # Required to avoid an error about inplace operations being
+                # modified while running the forward pass of the discriminator
+                # multiple times in one pass as is the case with the main
+                # training loop.
+                broadcast_buffers=False
+            )
 
     def _initialize_loss(self) -> None:
         """
@@ -129,6 +157,18 @@ class SRGANTrainer:
         self._initialize_loss()
         self._initialize_optimizers()
 
+    def _log(self, statement: str) -> None:
+        """
+        Print a statement only on the main process.
+
+        Parameters
+        ----------
+        statement : str
+            A ``string`` to print out only on the main process.
+        """
+        if self.main_process:
+            print(statement)
+
     def _test(self, epoch: int, output: str) -> None:
         """
         Run a test pass against the test dataset and sample image.
@@ -151,12 +191,12 @@ class SRGANTrainer:
         """
         self.generator.eval()
 
-        print(f'Testing results after epoch {epoch}')
+        self._log(f'Testing results after epoch {epoch}')
 
         with torch.no_grad():
             psnr = 0.0
 
-            for low_res, _, high_res in tqdm(self.test_loader):
+            for low_res, _, high_res in tqdm(self.test_loader, disable=not self.main_process):
                 low_res = low_res.to(self.device)
                 high_res = high_res.to(self.device)
 
@@ -164,7 +204,7 @@ class SRGANTrainer:
 
                 psnr += 10 * log10(1 / ((super_res - high_res) ** 2).mean().item())
             psnr = psnr / len(self.test_loader)
-            print(f'PSNR: {round(psnr, 3)}')
+            self._log(f'PSNR: {round(psnr, 3)}')
             phase = output.rstrip('.pth')
             if self.writer:
                 self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
@@ -193,16 +233,16 @@ class SRGANTrainer:
         used to initialize the weights of the generator in the second phase of
         training.
         """
-        print('=' * 80)
-        print('Starting pre-training')
+        self._log('=' * 80)
+        self._log('Starting pre-training')
 
         for epoch in range(1, self.pre_epochs + 1):
-            print(f'Starting epoch {epoch} out of {self.pre_epochs}')
+            self._log(f'Starting epoch {epoch} out of {self.pre_epochs}')
 
             self.generator.train()
             self.discriminator.train()
 
-            for _, (low_res, high_res) in enumerate(tqdm(self.train_loader)):
+            for _, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
                 high_res = high_res.to(self.device)
                 low_res = low_res.to(self.device)
 
@@ -266,19 +306,19 @@ class SRGANTrainer:
         Iterate over each image in the training dataset and update the model
         over the requested number of epochs.
         """
-        print('=' * 80)
-        print('Starting training loop')
+        self._log('=' * 80)
+        self._log('Starting training loop')
 
         self.best_psnr = -1.0
         self.generator.load_state_dict(torch.load('psnr.pth'))
 
         for epoch in range(1, self.epochs + 1):
-            print(f'Starting epoch {epoch} out of {self.epochs}')
+            self._log(f'Starting epoch {epoch} out of {self.epochs}')
 
             self.generator.train()
             self.discriminator.train()
 
-            for _, (low_res, high_res) in enumerate(tqdm(self.train_loader)):
+            for _, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
                 self._gan_loop(low_res, high_res)
             
             self.disc_scheduler.step()

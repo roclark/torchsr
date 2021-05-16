@@ -10,10 +10,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import torch
+import torch.distributed as dist
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
-from torchsr.constants import BATCH_SIZE, EPOCHS, PRE_EPOCHS, TRAIN_DIR
+from torchsr.constants import (BATCH_SIZE,
+                               EPOCHS,
+                               MASTER_ADDR,
+                               MASTER_PORT,
+                               PRE_EPOCHS,
+                               TRAIN_DIR)
 from torchsr.dataset import initialize_datasets
 from torchsr.test import test
 from torchsr.trainer import SRGANTrainer
@@ -49,9 +56,73 @@ def positive_integer(value: str) -> int:
     except TypeError:
         raise ArgumentTypeError(f'invalid int value: \'{value}\'')
     if int_value < 1:
-        raise ArgumentTypeError('dataset-multiplier must be a positive '
-                                'integer!')
+        raise ArgumentTypeError('value must be a positive integer!')
     return int_value
+
+
+def get_device(gpus: int) -> torch.device:
+    """
+    Return the device type to use.
+
+    If the system has GPUs available and the user didn't explicitly specify 0
+    GPUs, the device type will be 'cuda'. Otherwise, the device type will be
+    'cpu' which will be significantly slower.
+
+    Parameters
+    ----------
+    gpus : int
+        An ``int`` of the number of GPUs to use during training.
+
+    Returns
+    -------
+    torch.device
+        Returns the specific type of device to use for computations where
+        applicable.
+    """
+    if gpus > 0:
+        return torch.device('cuda')
+    else:
+        return torch.device('cpu')
+
+
+def gpu_count(gpus: int) -> int:
+    """
+    Find the number of GPUs to use.
+
+    By default, the application attempts to use all GPUs available in the
+    system but users can specify a different number of GPUs if desired. If the
+    system doesn't have any GPUs available, it will default to the CPUs. If the
+    user specifies a specific number of GPUs, it needs to be verified that it
+    is a positive integer and less than or equal to the total number of GPUs
+    available in the system.
+
+    Parameters
+    ----------
+    gpus : int
+        An ``int`` of the number of GPUs the user requested via the CLI,
+        defaulting to 0.
+
+    Returns
+    -------
+    int
+        Returns an ``int`` of the number of GPUs to use in the system.
+    """
+    count = torch.cuda.device_count()
+    if not torch.cuda.is_available():
+        print('No GPUs available. Running on CPUs instead.')
+        return 0
+    if gpus is None:
+        return count
+    if gpus <= 0:
+        print('No GPUs requested. Running on CPUs instead.')
+        return 0
+    if gpus <= count:
+        return gpus
+    if gpus > count:
+        print(f'Requested {gpus} GPUs but only found {count}')
+        print(f'Using {count} GPUs instead')
+        return count
+    return 0
 
 
 def parse_args() -> Namespace:
@@ -87,9 +158,19 @@ def parse_args() -> Namespace:
     train.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)
+    train.add_argument('--gpus', help='The number of GPUs to use for training '
+                       'on a single system. The GPUs will be automatically '
+                       'selected in numerical order. Default: All available '
+                       'GPUs.', type=int, default=None)
+    train.add_argument('--master-addr', help='The address to be used for all '
+                       f'distributed communication. Default: {MASTER_ADDR}',
+                       type=str, default=MASTER_ADDR)
+    train.add_argument('--master-port', help='The port to use for all '
+                       f'distributed communication. Default {MASTER_PORT}',
+                       type=str, default=MASTER_PORT)
     train.add_argument('--pretrain-epochs', help='The number of epochs to '
-                        'run pretraining for. Default: {PRE_EPOCHS}.',
-                        type=int, default=PRE_EPOCHS)
+                       f'run pretraining for. Default: {PRE_EPOCHS}.',
+                       type=int, default=PRE_EPOCHS)
     train.add_argument('--train-dir', help='Specify the location to the '
                         'directory where training images are stored. Default: '
                         f'{TRAIN_DIR}.', type=str, default=TRAIN_DIR)
@@ -100,21 +181,95 @@ def parse_args() -> Namespace:
     return parser.parse_args()
 
 
+def worker_environment(local_rank: int, world_size: int, args: Namespace) -> None:
+    """
+    Set the worker environment.
+
+    In order to configure distributed training, the training environment needs
+    to be set with various parameters including the master address and port to
+    communicate on for multi-node, the local rank of the process, and the world
+    size.
+
+    Parameters
+    ----------
+    local_rank : int
+        An ``int`` indicating which GPU to run on for a single node.
+    world_size : int
+        An ``int`` of the total number of processes for the entire cluster.
+    args : Namespace
+        A ``Namespace`` of all the arguments passed via the CLI.
+    """
+    os.environ['MASTER_ADDR'] = args.master_addr
+    os.environ['MASTER_PORT'] = args.master_port
+    os.environ['LOCAL_RANK'] = str(local_rank)
+    os.environ['RANK'] = str(local_rank)
+    os.environ['WORLD_SIZE'] = str(world_size)
+    os.environ['OMP_NUM_THREADS'] = str(1)
+
+
+def worker_process(local_rank: int, world_size: int, device: torch.device,
+                   args: Namespace) -> None:
+    """
+    Initiate training in a new process.
+
+    In each new process launched by the main function, setup the environment to
+    communicate for distributed work and initialize the distributed data
+    loaders before starting the training process.
+
+    Parameters
+    ----------
+    local_rank : int
+        An ``int`` denoting which GPU this process should run on.
+    world_size : int
+        An ``int`` of the total number of GPUs/processes the application will
+        run on.
+    device : torch.device
+        The specific type of device to use for computations where applicable.
+    args : Namespace
+        A ``Namespace`` of all the arguments passed via the CLI.
+    """
+    worker_environment(local_rank, world_size, args)
+    dist.init_process_group(backend='nccl', init_method='env://')
+    args.local_rank = local_rank
+    train_loader, test_loader = initialize_datasets(
+        args.train_dir,
+        batch_size=args.batch_size,
+        dataset_multiplier=args.dataset_multiplier,
+        distributed=True
+    )
+    trainer = SRGANTrainer(device, args, train_loader, test_loader,
+                           distributed=True)
+    trainer.train()
+
+
 def main() -> None:
     args = parse_args()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    gpus = gpu_count(args.gpus)
+    device = get_device(gpus)
+    distributed = gpus > 1
     
     if args.function == 'test':
         test(args, device)
     else:
-        train_loader, test_loader = initialize_datasets(
-            args.train_dir,
-            batch_size=args.batch_size,
-            dataset_multiplier=args.dataset_multiplier
-        )
-
-        trainer = SRGANTrainer(device, args, train_loader, test_loader)
-        trainer.train()
+        if distributed:
+            # Hard-coded for single node at the moment.
+            nodes = 1
+            world_size = gpus * nodes
+            torch.multiprocessing.spawn(
+                worker_process,
+                nprocs=gpus,
+                args=(world_size, device, args)
+            )
+        else:
+            train_loader, test_loader = initialize_datasets(
+                args.train_dir,
+                batch_size=args.batch_size,
+                dataset_multiplier=args.dataset_multiplier,
+                distributed=distributed
+            )
+            args.local_rank = -1
+            trainer = SRGANTrainer(device, args, train_loader, test_loader)
+            trainer.train()
 
 
 if __name__ == '__main__':

@@ -14,8 +14,7 @@ import os
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch import Tensor
-from torch.utils import data
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torchvision.transforms import (Compose,
                                     RandomCrop,
                                     RandomHorizontalFlip,
@@ -227,7 +226,8 @@ class TestData(Dataset):
 
 def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
                   upscale_factor: int = 4,
-                  dataset_multiplier: int = 1) -> DataLoader:
+                  dataset_multiplier: int = 1,
+                  distributed: bool = False) -> DataLoader:
     """
     Build a training dataset based on the input directory.
 
@@ -251,6 +251,9 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
     dataset_multiplier : int
         An ``int`` of the amount to augment the dataset to increase the number
         of samples per image.
+    distributed : bool
+        A ``boolean`` which evaluates to `True` if the application should be
+        run in distributed mode.
 
     Returns
     -------
@@ -261,17 +264,28 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
                            crop_size=crop_size,
                            upscale_factor=upscale_factor,
                            dataset_multiplier=dataset_multiplier)
-    trainloader = DataLoader(
-        dataset=train_data,
-        num_workers=16,
-        batch_size=batch_size,
-        shuffle=True
-    )
+    if distributed:
+        train_sampler = DistributedSampler(train_data)
+        trainloader = DataLoader(
+            dataset=train_data,
+            sampler=train_sampler,
+            num_workers=16,
+            batch_size=batch_size,
+            persistent_workers=True
+        )
+    else:
+        trainloader = DataLoader(
+            dataset=train_data,
+            num_workers=16,
+            batch_size=batch_size,
+            shuffle=True
+        )
     return trainloader
 
 
 def _test_dataset(test_subset: list,
-                 upscale_factor: int = 4) -> DataLoader:
+                 upscale_factor: int = 4,
+                 distributed: bool = False) -> DataLoader:
     """
     Build a testing dataset based on the input directory.
 
@@ -285,6 +299,9 @@ def _test_dataset(test_subset: list,
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    distributed : bool
+        A ``boolean`` which evaluates to `True` if the application should be
+        run in distributed mode.
 
     Returns
     -------
@@ -292,18 +309,29 @@ def _test_dataset(test_subset: list,
         Returns a ``DataLoader`` instance of the testing dataset.
     """
     test_data = TestData(test_subset, upscale_factor=upscale_factor)
-    testloader = DataLoader(
-        dataset=test_data,
-        num_workers=1,
-        batch_size=1,
-        shuffle=False
-    )
+    if distributed:
+        test_sampler = DistributedSampler(test_data)
+        testloader = DataLoader(
+            dataset=test_data,
+            sampler=test_sampler,
+            num_workers=1,
+            batch_size=1,
+            persistent_workers=True
+        )
+    else:
+        testloader = DataLoader(
+            dataset=test_data,
+            num_workers=1,
+            batch_size=1,
+            shuffle=False
+        )
     return testloader
 
 
 def initialize_datasets(train_directory: str, batch_size: int,
                         crop_size: int = 96, upscale_factor: int = 4,
-                        dataset_multiplier: int = 1) -> Tuple[DataLoader, DataLoader]:
+                        dataset_multiplier: int = 1,
+                        distributed: bool = False) -> Tuple[DataLoader, DataLoader]:
     """
     Initialize testing and training datasets.
 
@@ -330,6 +358,9 @@ def initialize_datasets(train_directory: str, batch_size: int,
     dataset_multiplier : int
         An ``int`` of the amount to augment the dataset to increase the number
         of samples per image.
+    distributed : bool
+        A ``boolean`` which evaluates to `True` if the application should be
+        run in distributed mode.
 
     Returns
     -------
@@ -343,6 +374,8 @@ def initialize_datasets(train_directory: str, batch_size: int,
     trainloader = _train_dataset(train_data, batch_size=batch_size,
                                  crop_size=crop_size,
                                  upscale_factor=upscale_factor,
-                                 dataset_multiplier=dataset_multiplier)
-    testloader = _test_dataset(test_data, upscale_factor=upscale_factor)
+                                 dataset_multiplier=dataset_multiplier,
+                                 distributed=distributed)
+    testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
+                               distributed=distributed)
     return trainloader, testloader
