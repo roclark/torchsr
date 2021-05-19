@@ -164,6 +164,11 @@ def parse_args() -> Namespace:
                         'this could ignore over 99%% of the image. To increase '
                         'the number of samples per image, use a multiplier '
                         'greater than 1.', type=positive_integer, default=1)
+    train.add_argument('--disable-amp', help='Disable Automatic Mixed '
+                       'Precision (AMP) which uses both float32 and float16 to'
+                       ' boost performance. Disabling AMP can decrease '
+                       'performance by as much as 2X or more.',
+                       action='store_true')
     train.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)

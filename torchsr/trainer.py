@@ -13,6 +13,7 @@
 import os
 import time
 import torch
+import torch.cuda.amp as amp
 import torch.optim as optim
 import torchvision.utils as utils
 from argparse import Namespace
@@ -63,6 +64,7 @@ class SRGANTrainer:
     def __init__(self, device: str, args: Namespace, train_loader: DataLoader,
                  test_loader: DataLoader, train_len: int, test_len: int,
                  distributed: bool = False) -> None:
+        self.amp = not args.disable_amp
         self.best_psnr = -1.0
         self.device = device
         self.distributed = distributed
@@ -168,6 +170,7 @@ class SRGANTrainer:
             step_size=self.epochs // 2,
             gamma=0.1
         )
+        self.scaler = amp.GradScaler(enabled=self.amp)
 
     def _initialize_trainer(self) -> None:
         """
@@ -283,10 +286,13 @@ class SRGANTrainer:
 
                 self.psnr_optimizer.zero_grad()
 
-                super_res = self.generator(low_res)
-                loss = self.mse_loss(super_res, high_res)
-                loss.backward()
-                self.psnr_optimizer.step()
+                with amp.autocast(enabled=self.amp):
+                    super_res = self.generator(low_res)
+                    loss = self.mse_loss(super_res, high_res)
+
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.psnr_optimizer)
+                self.scaler.update()
 
             end_time = time.time()
             time_taken = end_time - start_time
