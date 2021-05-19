@@ -231,14 +231,14 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
     worker_environment(local_rank, world_size, args)
     dist.init_process_group(backend='nccl', init_method='env://')
     args.local_rank = local_rank
-    train_loader, test_loader = initialize_datasets(
+    train_loader, test_loader, train_len, test_len = initialize_datasets(
         args.train_dir,
         batch_size=args.batch_size,
         dataset_multiplier=args.dataset_multiplier,
         distributed=True
     )
-    trainer = SRGANTrainer(device, args, train_loader, test_loader,
-                           distributed=True)
+    trainer = SRGANTrainer(device, args, train_loader, test_loader, train_len,
+                           test_len, distributed=True)
     trainer.train()
 
 
@@ -261,14 +261,15 @@ def main() -> None:
                 args=(world_size, device, args)
             )
         else:
-            train_loader, test_loader = initialize_datasets(
+            train_loader, test_loader, train_len, test_len = initialize_datasets(
                 args.train_dir,
                 batch_size=args.batch_size,
                 dataset_multiplier=args.dataset_multiplier,
                 distributed=distributed
             )
             args.local_rank = -1
-            trainer = SRGANTrainer(device, args, train_loader, test_loader)
+            trainer = SRGANTrainer(device, args, train_loader, test_loader,
+                                   train_len, test_len)
             trainer.train()
 
 

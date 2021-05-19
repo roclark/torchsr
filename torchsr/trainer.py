@@ -10,6 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import time
 import torch
 import torch.optim as optim
 import torchvision.utils as utils
@@ -51,11 +52,16 @@ class SRGANTrainer:
         A ``DataLoader`` of all images in the training dataset.
     test_loader : DataLoader
         A ``DataLoader`` of all images in the testing dataset.
+    train_len : int
+        An ``int`` representing the total size of the training dataset.
+    test_len : int
+        An ``int`` representing the total size of the testing dataset.
     distributed : bool
         A ``boolean`` which evalutes to `True` if the training is distributed.
     """
     def __init__(self, device: str, args: Namespace, train_loader: DataLoader,
-                 test_loader: DataLoader, distributed=False) -> None:
+                 test_loader: DataLoader, train_len: int, test_len: int,
+                 distributed: bool = False) -> None:
         self.best_psnr = -1.0
         self.device = device
         self.distributed = distributed
@@ -63,7 +69,9 @@ class SRGANTrainer:
         self.local_rank = args.local_rank
         self.pre_epochs = args.pretrain_epochs
         self.test_loader = test_loader
+        self.test_len = test_len
         self.train_loader = train_loader
+        self.train_len = train_len
         # For using a single process, the default rank is -1 for the first and
         # only process.
         self.main_process = args.local_rank in [-1, 0]
@@ -78,6 +86,13 @@ class SRGANTrainer:
 
         self._initialize_trainer()
         self._create_test_image()
+
+    def _cleanup(self) -> None:
+        """
+        Remove and close any unnecessary items.
+        """
+        if self.writer:
+            self.writer.close()
 
     def _create_test_image(self) -> None:
         """
@@ -195,6 +210,7 @@ class SRGANTrainer:
 
         with torch.no_grad():
             psnr = 0.0
+            start_time = time.time()
 
             for low_res, _, high_res in tqdm(self.test_loader, disable=not self.main_process):
                 low_res = low_res.to(self.device)
@@ -203,11 +219,18 @@ class SRGANTrainer:
                 super_res = self.generator(low_res).to(self.device)
 
                 psnr += 10 * log10(1 / ((super_res - high_res) ** 2).mean().item())
+
+            end_time = time.time()
+            time_taken = end_time - start_time
+            throughput = self.test_len / time_taken
             psnr = psnr / len(self.test_loader)
-            self._log(f'PSNR: {round(psnr, 3)}')
+
+            self._log(f'PSNR: {round(psnr, 3)}, '
+                      f'Throughput: {round(throughput, 3)} images/sec')
             phase = output.rstrip('.pth')
             if self.writer:
                 self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
+                self.writer.add_scalar(f'{phase}/throughput/test', throughput, epoch)
 
             if psnr > self.best_psnr:
                 self.best_psnr = psnr
@@ -242,6 +265,8 @@ class SRGANTrainer:
             self.generator.train()
             self.discriminator.train()
 
+            start_time = time.time()
+
             for _, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
                 high_res = high_res.to(self.device)
                 low_res = low_res.to(self.device)
@@ -253,6 +278,14 @@ class SRGANTrainer:
                 loss.backward()
                 self.psnr_optimizer.step()
 
+            end_time = time.time()
+            time_taken = end_time - start_time
+            throughput = self.train_len / time_taken
+
+            self._log(f'Throughput: {round(throughput, 3)} images/sec')
+
+            if self.writer:
+                self.writer.add_scalar(f'psnr/throughput/train', throughput, epoch)
             self._test(epoch, 'psnr.pth')
 
     def _gan_loop(self, low_res: Tensor, high_res: Tensor) -> None:
@@ -318,8 +351,19 @@ class SRGANTrainer:
             self.generator.train()
             self.discriminator.train()
 
+            start_time = time.time()
+
             for _, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
                 self._gan_loop(low_res, high_res)
+
+            end_time = time.time()
+            time_taken = end_time - start_time
+            throughput = self.train_len / time_taken
+
+            self._log(f'Throughput: {round(throughput, 3)} images/sec')
+
+            if self.writer:
+                self.writer.add_scalar(f'gan/throughput/train', throughput, epoch)
             
             self.disc_scheduler.step()
             self.gen_scheduler.step()
@@ -333,3 +377,4 @@ class SRGANTrainer:
         """
         self._pretrain()
         self._gan_train()
+        self._cleanup()

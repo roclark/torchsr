@@ -366,7 +366,7 @@ def initialize_datasets(train_directory: str, batch_size: int,
     -------
     Tuple
         Returns a ``tuple`` comprised of the training and testing DataLoaders,
-        respectively.
+        respectively followed by the size of each dataset.
     """
     dataset = _image_dataset(train_directory)
     train_data, test_data = train_test_split(dataset, test_size=0.1,
@@ -378,4 +378,4 @@ def initialize_datasets(train_directory: str, batch_size: int,
                                  distributed=distributed)
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
                                distributed=distributed)
-    return trainloader, testloader
+    return trainloader, testloader, len(train_data), len(test_data)
