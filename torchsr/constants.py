@@ -14,7 +14,7 @@ BATCH_SIZE = 64
 EPOCHS = 1000
 PRE_EPOCHS = 1000
 
-TRAIN_DIR = 'dataset/train'
+TRAIN_DIR = 'dataset'
 
 MASTER_ADDR = '127.0.0.1'
 MASTER_PORT = '29500'
