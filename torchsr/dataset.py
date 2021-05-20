@@ -227,6 +227,7 @@ class TestData(Dataset):
 def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
                   upscale_factor: int = 4,
                   dataset_multiplier: int = 1,
+                  workers: int = 16,
                   distributed: bool = False) -> DataLoader:
     """
     Build a training dataset based on the input directory.
@@ -251,6 +252,9 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
     dataset_multiplier : int
         An ``int`` of the amount to augment the dataset to increase the number
         of samples per image.
+    workers : int
+        An ``int`` of the number of workers to use for loading and
+        preprocessing images.
     distributed : bool
         A ``boolean`` which evaluates to `True` if the application should be
         run in distributed mode.
@@ -269,14 +273,14 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
         trainloader = DataLoader(
             dataset=train_data,
             sampler=train_sampler,
-            num_workers=16,
+            num_workers=workers,
             batch_size=batch_size,
             persistent_workers=True
         )
     else:
         trainloader = DataLoader(
             dataset=train_data,
-            num_workers=16,
+            num_workers=workers,
             batch_size=batch_size,
             shuffle=True
         )
@@ -285,6 +289,7 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
 
 def _test_dataset(test_subset: list,
                  upscale_factor: int = 4,
+                 workers: int = 16,
                  distributed: bool = False) -> DataLoader:
     """
     Build a testing dataset based on the input directory.
@@ -299,6 +304,9 @@ def _test_dataset(test_subset: list,
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    workers : int
+        An ``int`` of the number of workers to use for loading and
+        preprocessing images.
     distributed : bool
         A ``boolean`` which evaluates to `True` if the application should be
         run in distributed mode.
@@ -314,14 +322,14 @@ def _test_dataset(test_subset: list,
         testloader = DataLoader(
             dataset=test_data,
             sampler=test_sampler,
-            num_workers=1,
+            num_workers=workers,
             batch_size=1,
             persistent_workers=True
         )
     else:
         testloader = DataLoader(
             dataset=test_data,
-            num_workers=1,
+            num_workers=workers,
             batch_size=1,
             shuffle=False
         )
@@ -331,6 +339,7 @@ def _test_dataset(test_subset: list,
 def initialize_datasets(train_directory: str, batch_size: int,
                         crop_size: int = 96, upscale_factor: int = 4,
                         dataset_multiplier: int = 1,
+                        workers: int = 16,
                         distributed: bool = False) -> Tuple[DataLoader, DataLoader]:
     """
     Initialize testing and training datasets.
@@ -358,6 +367,9 @@ def initialize_datasets(train_directory: str, batch_size: int,
     dataset_multiplier : int
         An ``int`` of the amount to augment the dataset to increase the number
         of samples per image.
+    workers : int
+        An ``int`` of the number of workers to use for loading and
+        preprocessing images.
     distributed : bool
         A ``boolean`` which evaluates to `True` if the application should be
         run in distributed mode.
@@ -375,7 +387,8 @@ def initialize_datasets(train_directory: str, batch_size: int,
                                  crop_size=crop_size,
                                  upscale_factor=upscale_factor,
                                  dataset_multiplier=dataset_multiplier,
+                                 workers=workers,
                                  distributed=distributed)
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
-                               distributed=distributed)
+                               workers=workers, distributed=distributed)
     return trainloader, testloader, len(train_data), len(test_data)

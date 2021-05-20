@@ -146,6 +146,15 @@ def parse_args() -> Namespace:
     train.add_argument('--batch-size', help='The number of images to include '
                         f'in every batch. Default: {BATCH_SIZE}.', type=int,
                         default=BATCH_SIZE)
+    train.add_argument('--data-workers', help='Specify the number of parallel '
+                       'workers to spawn to read and preprocess data. In '
+                       'general, the higher the number of workers, the faster '
+                       'training and testing will be up to a certain point. A '
+                       'good rule of thumb is to take the number of images in '
+                       'the dataset, divide it by the batch size, and dividing '
+                       'that by the number of GPUs being used, or 1 if '
+                       'CPU-only while rounding up in both cases.', type=int,
+                       default=16)
     train.add_argument('--dataset-multiplier', help='Artificially increase '
                         'the size of the dataset by taking N number of random '
                         'samples from each image in the training dataset. The '
@@ -235,6 +244,7 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
         args.train_dir,
         batch_size=args.batch_size,
         dataset_multiplier=args.dataset_multiplier,
+        workers=args.data_workers,
         distributed=True
     )
     trainer = SRGANTrainer(device, args, train_loader, test_loader, train_len,
@@ -265,6 +275,7 @@ def main() -> None:
                 args.train_dir,
                 batch_size=args.batch_size,
                 dataset_multiplier=args.dataset_multiplier,
+                workers=args.data_workers,
                 distributed=distributed
             )
             args.local_rank = -1
