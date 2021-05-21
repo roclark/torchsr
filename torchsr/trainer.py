@@ -10,6 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import time
 import torch
 import torch.optim as optim
@@ -68,6 +69,7 @@ class SRGANTrainer:
         self.epochs = args.epochs
         self.local_rank = args.local_rank
         self.pre_epochs = args.pretrain_epochs
+        self.save_image = not args.skip_image_save
         self.test_loader = test_loader
         self.test_len = test_len
         self.train_loader = train_loader
@@ -83,6 +85,10 @@ class SRGANTrainer:
             self.writer = SummaryWriter()
         else:
             self.writer = None
+
+        if self.save_image and self.main_process \
+           and not os.path.exists('output'):
+            os.makedirs('output')
 
         self._initialize_trainer()
         self._create_test_image()
@@ -236,6 +242,10 @@ class SRGANTrainer:
                 self.best_psnr = psnr
                 torch.save(self.generator.state_dict(), output)
 
+            # If the user requested to not save images, return immediately and
+            # avoid generating and saving the image.
+            if not self.save_image:
+                return
             # Save a copy of a single image that has been super-resed for easy
             # tracking of progress.
             super_res = self.generator(self.test_image).to(self.device)

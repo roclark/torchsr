@@ -180,6 +180,11 @@ def parse_args() -> Namespace:
     train.add_argument('--pretrain-epochs', help='The number of epochs to '
                        f'run pretraining for. Default: {PRE_EPOCHS}.',
                        type=int, default=PRE_EPOCHS)
+    train.add_argument('--skip-image-save', help='By default, a sample image '
+                       'is generated after every epoch and saved to the '
+                       '"outputs/" directory. Add this flag to skip generating '
+                       'and saving the image to reduce disk space.',
+                       action='store_true')
     train.add_argument('--train-dir', help='Specify the location to the '
                         'directory where training images are stored. Default: '
                         f'{TRAIN_DIR}.', type=str, default=TRAIN_DIR)
