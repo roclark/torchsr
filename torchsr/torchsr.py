@@ -19,11 +19,12 @@ from torchsr.constants import (BATCH_SIZE,
                                EPOCHS,
                                MASTER_ADDR,
                                MASTER_PORT,
+                               MODEL,
                                PRE_EPOCHS,
                                TRAIN_DIR)
 from torchsr.dataset import initialize_datasets
 from torchsr.test import test
-from torchsr.trainer import SRGANTrainer
+from torchsr.models import MODELS, select_test_model, select_trainer_model
 from torchsr.__version__ import VERSION
 
 
@@ -182,6 +183,9 @@ def parse_args() -> Namespace:
     train.add_argument('--master-port', help='The port to use for all '
                        f'distributed communication. Default {MASTER_PORT}',
                        type=str, default=MASTER_PORT)
+    train.add_argument('--model', help='Select the model to use for super '
+                       'resolution.', type=str, default=MODEL,
+                       choices=MODELS.keys())
     train.add_argument('--pretrain-epochs', help='The number of epochs to '
                        f'run pretraining for. Default: {PRE_EPOCHS}.',
                        type=int, default=PRE_EPOCHS)
@@ -197,6 +201,13 @@ def parse_args() -> Namespace:
     test = commands.add_parser('test', help='Generated a super resolution '
                                'image based on a trained SRGAN model.')
     test.add_argument('image', type=str, help='Filename of image to upres.')
+    test.add_argument('--gpus', help='The number of GPUs to use for training '
+                      'on a single system. The GPUs will be automatically '
+                      'selected in numerical order. Default: All available '
+                      'GPUs.', type=int, default=None)
+    test.add_argument('--model', help='Select the model to use for super '
+                      'resolution.', choices=MODELS.keys(), type=str,
+                      default=MODEL)
     return parser.parse_args()
 
 
@@ -227,6 +238,7 @@ def worker_environment(local_rank: int, world_size: int, args: Namespace) -> Non
 
 
 def worker_process(local_rank: int, world_size: int, device: torch.device,
+                   train_class: object, crop_size: int,
                    args: Namespace) -> None:
     """
     Initiate training in a new process.
@@ -244,6 +256,12 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
         run on.
     device : torch.device
         The specific type of device to use for computations where applicable.
+    train_class : training model object
+        The specified model's class declaration to be used for training.
+    crop_size : int
+        An ``int`` of the size to crop the high resolution images to in pixels.
+        The size is used for both the height and width, ie. a crop_size of `96`
+        will take a 96x96 section of the input image.
     args : Namespace
         A ``Namespace`` of all the arguments passed via the CLI.
     """
@@ -253,12 +271,13 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
     train_loader, test_loader, train_len, test_len = initialize_datasets(
         args.train_dir,
         batch_size=args.batch_size,
+        crop_size=crop_size,
         dataset_multiplier=args.dataset_multiplier,
         workers=args.data_workers,
         distributed=True
     )
-    trainer = SRGANTrainer(device, args, train_loader, test_loader, train_len,
-                           test_len, distributed=True)
+    trainer = train_class(device, args, train_loader, test_loader, train_len,
+                          test_len, distributed=True)
     trainer.train()
 
 
@@ -267,9 +286,11 @@ def main() -> None:
     gpus = gpu_count(args.gpus)
     device = get_device(gpus)
     distributed = gpus > 1
+    train_class, crop_size = select_trainer_model(args)
     
     if args.function == 'test':
-        test(args, device)
+        model = select_test_model(args)
+        test(args, model, device)
     else:
         if distributed:
             # Hard-coded for single node at the moment.
@@ -278,19 +299,20 @@ def main() -> None:
             torch.multiprocessing.spawn(
                 worker_process,
                 nprocs=gpus,
-                args=(world_size, device, args)
+                args=(world_size, device, train_class, crop_size, args)
             )
         else:
             train_loader, test_loader, train_len, test_len = initialize_datasets(
                 args.train_dir,
                 batch_size=args.batch_size,
+                crop_size=crop_size,
                 dataset_multiplier=args.dataset_multiplier,
                 workers=args.data_workers,
                 distributed=distributed
             )
             args.local_rank = -1
-            trainer = SRGANTrainer(device, args, train_loader, test_loader,
-                                   train_len, test_len)
+            trainer = train_class(device, args, train_loader, test_loader,
+                                  train_len, test_len)
             trainer.train()
 
 

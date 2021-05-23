@@ -31,9 +31,9 @@ from PIL import Image
 from torch import nn
 from tqdm import tqdm
 
-from torchsr.discriminator import Discriminator
-from torchsr.generator import Generator
-from torchsr.loss import VGGLoss
+from torchsr.srgan.discriminator import Discriminator
+from torchsr.srgan.generator import Generator
+from torchsr.srgan.loss import VGGLoss
 
 
 class SRGANTrainer:
@@ -302,7 +302,7 @@ class SRGANTrainer:
 
             if self.writer and self.main_process:
                 self.writer.add_scalar(f'psnr/throughput/train', throughput, epoch)
-            self._test(epoch, 'psnr.pth')
+            self._test(epoch, 'srgan-psnr.pth')
 
     def _gan_loop(self, low_res: Tensor, high_res: Tensor) -> None:
         """
@@ -359,7 +359,7 @@ class SRGANTrainer:
         self._log('Starting training loop')
 
         self.best_psnr = -1.0
-        self.generator.load_state_dict(torch.load('psnr.pth'))
+        self.generator.load_state_dict(torch.load('srgan-psnr.pth'))
 
         for epoch in range(1, self.epochs + 1):
             self._log(f'Starting epoch {epoch} out of {self.epochs}')
@@ -384,7 +384,7 @@ class SRGANTrainer:
             self.disc_scheduler.step()
             self.gen_scheduler.step()
 
-            self._test(epoch, 'gan.pth')
+            self._test(epoch, 'srgan-gan.pth')
 
     def train(self) -> None:
         """

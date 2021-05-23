@@ -18,3 +18,5 @@ TRAIN_DIR = 'dataset'
 
 MASTER_ADDR = '127.0.0.1'
 MASTER_PORT = '29500'
+
+MODEL = 'ESRGAN'

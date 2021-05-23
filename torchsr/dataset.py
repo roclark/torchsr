@@ -225,10 +225,10 @@ class TestData(Dataset):
 
 
 def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
-                  upscale_factor: int = 4,
-                  dataset_multiplier: int = 1,
-                  workers: int = 16,
-                  distributed: bool = False) -> DataLoader:
+                   upscale_factor: int = 4,
+                   dataset_multiplier: int = 1,
+                   workers: int = 16,
+                   distributed: bool = False) -> DataLoader:
     """
     Build a training dataset based on the input directory.
 
@@ -288,9 +288,10 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
 
 
 def _test_dataset(test_subset: list,
-                 upscale_factor: int = 4,
-                 workers: int = 16,
-                 distributed: bool = False) -> DataLoader:
+                  upscale_factor: int = 4,
+                  crop_size: int = 96,
+                  workers: int = 16,
+                  distributed: bool = False) -> DataLoader:
     """
     Build a testing dataset based on the input directory.
 
@@ -304,6 +305,10 @@ def _test_dataset(test_subset: list,
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    crop_size : int
+        An ``int`` of the size to crop the high resolution images to in pixels.
+        The size is used for both the height and width, ie. a crop_size of `96`
+        will take a 96x96 section of the input image.
     workers : int
         An ``int`` of the number of workers to use for loading and
         preprocessing images.
@@ -316,7 +321,8 @@ def _test_dataset(test_subset: list,
     DataLoader
         Returns a ``DataLoader`` instance of the testing dataset.
     """
-    test_data = TestData(test_subset, upscale_factor=upscale_factor)
+    test_data = TestData(test_subset, crop_size=crop_size,
+                         upscale_factor=upscale_factor)
     if distributed:
         test_sampler = DistributedSampler(test_data)
         testloader = DataLoader(
@@ -390,5 +396,6 @@ def initialize_datasets(train_directory: str, batch_size: int,
                                  workers=workers,
                                  distributed=distributed)
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
-                               workers=workers, distributed=distributed)
+                               crop_size=crop_size, workers=workers,
+                               distributed=distributed)
     return trainloader, testloader, len(train_data), len(test_data)

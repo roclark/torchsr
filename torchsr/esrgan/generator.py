@@ -10,14 +10,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 import torch
+import torch.nn.functional as F
 from torch import nn, Tensor
 
-from torchsr.residual import ResidualBlock, SubpixelConvolutionLayer
+from torchsr.esrgan.residual import ResidualInResidualDenseBlock
 
 
-NUM_RESIDUAL = 16
+NUM_RESIDUAL = 23
 
 
 class Generator(nn.Module):
@@ -26,36 +26,30 @@ class Generator(nn.Module):
 
     Parameters
     ----------
-    scale_factor : int
-        An ``int`` of the amount the image should be upscaled in each
-        direction.
+    num_rrdb_blocks : int
+        An ``int`` of the number of Residual in Residual Blocks to use.
     """
-    def __init__(self, scale_factor: int = 4) -> None:
+    def __init__(self, num_rrdb_blocks: int = NUM_RESIDUAL) -> None:
         super(Generator, self).__init__()
-        num_conv_layers = int(math.log(scale_factor, 2))
 
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=9, stride=1, padding=4),
-            nn.PReLU()
-        )
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
 
         blocks = []
-        for _ in range(NUM_RESIDUAL):
-            blocks.append(ResidualBlock(channels=64))
+        for _ in range(num_rrdb_blocks):
+            blocks += [ResidualInResidualDenseBlock(channels=64, growth_channels=32, scale_ratio=0.2)]
         self.blocks = nn.Sequential(*blocks)
 
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64)
+        self.conv2 =nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+
+        self.upsample1 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upsample2 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(negative_slope=0.2, inplace=True)
         )
 
-        conv_layers = []
-
-        for _ in range(num_conv_layers):
-            conv_layers.append(SubpixelConvolutionLayer(64))
-        self.conv_layers = nn.Sequential(*conv_layers)
-
-        self.conv3 = nn.Conv2d(64, 3, kernel_size=9, stride=1, padding=4)
+        self.conv4 = nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -76,6 +70,12 @@ class Generator(nn.Module):
         block = self.blocks(conv1)
         conv2 = self.conv2(block)
         out = torch.add(conv1, conv2)
-        out = self.conv_layers(out)
+        out = F.leaky_relu(self.upsample1(F.interpolate(out, scale_factor=2, mode='nearest')),
+                           negative_slope=0.2,
+                           inplace=True)
+        out = F.leaky_relu(self.upsample2(F.interpolate(out, scale_factor=2, mode='nearest')),
+                           negative_slope=0.2,
+                           inplace=True)
         out = self.conv3(out)
+        out = self.conv4(out)
         return out
