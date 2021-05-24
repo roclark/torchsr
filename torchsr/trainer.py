@@ -237,7 +237,7 @@ class SRGANTrainer:
             self._log(f'PSNR: {round(psnr, 3)}, '
                       f'Throughput: {round(throughput, 3)} images/sec')
             phase = output.rstrip('.pth')
-            if self.writer:
+            if self.writer and self.main_process:
                 self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
                 self.writer.add_scalar(f'{phase}/throughput/test', throughput, epoch)
 
@@ -257,7 +257,7 @@ class SRGANTrainer:
             output_image = Resize((height // 4, width // 4),
                                   interpolation=InterpolationMode.BICUBIC)(super_res)
             output_image = utils.make_grid(output_image)
-            if self.writer:
+            if self.writer and self.main_process:
                 self.writer.add_image(f'images/epoch{epoch}', output_image)
 
     def _pretrain(self) -> None:
@@ -300,7 +300,7 @@ class SRGANTrainer:
 
             self._log(f'Throughput: {round(throughput, 3)} images/sec')
 
-            if self.writer:
+            if self.writer and self.main_process:
                 self.writer.add_scalar(f'psnr/throughput/train', throughput, epoch)
             self._test(epoch, 'psnr.pth')
 
@@ -378,7 +378,7 @@ class SRGANTrainer:
 
             self._log(f'Throughput: {round(throughput, 3)} images/sec')
 
-            if self.writer:
+            if self.writer and self.main_process:
                 self.writer.add_scalar(f'gan/throughput/train', throughput, epoch)
             
             self.disc_scheduler.step()
