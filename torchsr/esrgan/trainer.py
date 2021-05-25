@@ -273,6 +273,7 @@ class ESRGANTrainer:
         self._log('Starting pre-training')
 
         for epoch in range(1, self.pre_epochs + 1):
+            self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.pre_epochs}')
 
             self.generator.train()
@@ -375,6 +376,7 @@ class ESRGANTrainer:
         self.generator.load_state_dict(torch.load('esrgan-psnr.pth'))
 
         for epoch in range(1, self.epochs + 1):
+            self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.epochs}')
 
             self.generator.train()
