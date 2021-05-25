@@ -193,7 +193,7 @@ class ESRGANTrainer:
         if self.main_process:
             print(statement)
 
-    def _test(self, epoch: int, output: str) -> None:
+    def _test(self, epoch: int, phase: str) -> None:
         """
         Run a test pass against the test dataset and sample image.
 
@@ -210,7 +210,7 @@ class ESRGANTrainer:
         ----------
         epoch : int
             An ``int`` of the current epoch in the training pass.
-        output : str
+        phase : str
             A ``string`` of the current training phase.
         """
         self.generator.eval()
@@ -236,14 +236,17 @@ class ESRGANTrainer:
 
             self._log(f'PSNR: {round(psnr, 3)}, '
                       f'Throughput: {round(throughput, 3)} images/sec')
-            phase = output.rstrip('.pth')
             if self.writer and self.main_process:
-                self.writer.add_scalar(f'{phase}/PSNR', psnr, epoch)
-                self.writer.add_scalar(f'{phase}/throughput/test', throughput, epoch)
+                # Strip so we get just the short phase, ie 'gan' or 'psnr'
+                short_phase = ''.join(phase.split('-')[1:])
+                self.writer.add_scalar(f'{short_phase}/PSNR', psnr, epoch)
+                self.writer.add_scalar(f'{short_phase}/throughput/test', throughput, epoch)
 
             if psnr > self.best_psnr:
                 self.best_psnr = psnr
-                torch.save(self.generator.state_dict(), output)
+                torch.save(self.generator.state_dict(), f'{phase}-best.pth')
+            if self.main_process:
+                torch.save(self.generator.state_dict(), f'{phase}-latest.pth')
 
             # If the user requested to not save images, return immediately and
             # avoid generating and saving the image.
@@ -303,7 +306,7 @@ class ESRGANTrainer:
 
             if self.writer and self.main_process:
                 self.writer.add_scalar(f'psnr/throughput/train', throughput, epoch)
-            self._test(epoch, 'esrgan-psnr.pth')
+            self._test(epoch, 'esrgan-psnr')
 
     def _gan_loop(self, low_res: Tensor, high_res: Tensor) -> None:
         """
@@ -373,7 +376,7 @@ class ESRGANTrainer:
         self._log('Starting training loop')
 
         self.best_psnr = -1.0
-        self.generator.load_state_dict(torch.load('esrgan-psnr.pth'))
+        self.generator.load_state_dict(torch.load('esrgan-psnr-best.pth'))
 
         for epoch in range(1, self.epochs + 1):
             self._log('-' * 80)
@@ -399,7 +402,7 @@ class ESRGANTrainer:
             self.disc_scheduler.step()
             self.gen_scheduler.step()
 
-            self._test(epoch, 'esrgan-gan.pth')
+            self._test(epoch, 'esrgan-gan')
 
     def train(self) -> None:
         """

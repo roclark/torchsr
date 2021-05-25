@@ -38,7 +38,7 @@ def test(args: Namespace, model: object, device: str) -> NoReturn:
         `cuda` for NVIDIA GPUs.
     """
     generator = model().to(device)
-    state_dict = torch.load(f'{args.model.lower()}-gan.pth')
+    state_dict = torch.load(f'{args.model.lower()}-gan-best.pth')
 
     new_state_dict = OrderedDict()
 
