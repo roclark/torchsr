@@ -10,12 +10,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import cv2
+import numpy as np
 import torch
 from argparse import Namespace
 from collections import OrderedDict
 from PIL import Image
 from torchvision.transforms import ToTensor
+from torchvision.transforms.transforms import ToPILImage
 from torchvision.utils import save_image
+from tqdm import tqdm
 from typing import NoReturn
 
 
@@ -53,6 +57,33 @@ def test(args: Namespace, model: object, device: str) -> NoReturn:
         new_state_dict[name] = value
 
     generator.load_state_dict(new_state_dict)
+
+    if args.image.endswith('.mp4'):
+        output = cv2.VideoWriter('upres-sample_input.mp4',
+                                 cv2.VideoWriter_fourcc('M', 'P', '4', 'V'),
+                                 30,
+                                 (1704, 960))
+        video = cv2.VideoCapture(args.image)
+        success, frame = video.read()
+
+        for _ in tqdm(range(int(video.get(cv2.CAP_PROP_FRAME_COUNT)))):
+            if not success:
+                continue
+            low_res = ToTensor()(frame)
+            low_res = low_res.unsqueeze(0)
+            low_res = low_res.to(device)
+
+            super_res = generator(low_res)
+            super_res = super_res.cpu()
+            super_res = super_res.data[0].numpy()
+            super_res *= 255.0
+            super_res = (np.uint8(super_res).transpose((1, 2, 0)))
+            output.write(super_res)
+            success, frame = video.read()
+        output.release()
+        video.release()
+        cv2.destroyAllWindows()
+        sys.exit()
 
     image = Image.open(args.image)
     low_res = ToTensor()(image)
