@@ -69,8 +69,10 @@ class ESRGANTrainer:
         self.device = device
         self.distributed = distributed
         self.epochs = args.epochs
+        self.gan_checkpoint = args.gan_checkpoint
         self.local_rank = args.local_rank
         self.pre_epochs = args.pretrain_epochs
+        self.psnr_checkpoint = args.psnr_checkpoint
         self.save_image = not args.skip_image_save
         self.test_loader = test_loader
         self.test_len = test_len
@@ -275,6 +277,9 @@ class ESRGANTrainer:
         self._log('=' * 80)
         self._log('Starting pre-training')
 
+        if self.psnr_checkpoint:
+            self.generator.load_state_dict(torch.load(self.psnr_checkpoint))
+
         for epoch in range(1, self.pre_epochs + 1):
             self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.pre_epochs}')
@@ -376,7 +381,14 @@ class ESRGANTrainer:
         self._log('Starting training loop')
 
         self.best_psnr = -1.0
-        self.generator.load_state_dict(torch.load('esrgan-psnr-best.pth'))
+        try:
+            if self.gan_checkpoint:
+                path = self.gan_checkpoint
+            else:
+                path = 'esrgan-psnr-best.pth'
+            self.generator.load_state_dict(torch.load(path))
+        except FileNotFoundError:
+            print('Pre-trained file not found. Training GAN from scratch')
 
         for epoch in range(1, self.epochs + 1):
             self._log('-' * 80)

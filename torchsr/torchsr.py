@@ -173,6 +173,8 @@ def parse_args() -> Namespace:
     train.add_argument('--epochs', help='The number of epochs to run '
                         f'training for. Default: {EPOCHS}.', type=int,
                         default=EPOCHS)
+    train.add_argument('--gan-checkpoint', help='Specify an existing trained '
+                       'model for the GAN-based training phase.', type=str)
     train.add_argument('--gpus', help='The number of GPUs to use for training '
                        'on a single system. The GPUs will be automatically '
                        'selected in numerical order. Default: All available '
@@ -189,6 +191,8 @@ def parse_args() -> Namespace:
     train.add_argument('--pretrain-epochs', help='The number of epochs to '
                        f'run pretraining for. Default: {PRE_EPOCHS}.',
                        type=int, default=PRE_EPOCHS)
+    train.add_argument('--psnr-checkpoint', help='Specify an existing trained '
+                       'model for the PSNR-based training phase.', type=str)
     train.add_argument('--skip-image-save', help='By default, a sample image '
                        'is generated after every epoch and saved to the '
                        '"outputs/" directory. Add this flag to skip generating '
