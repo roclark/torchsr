@@ -193,6 +193,8 @@ def parse_args() -> Namespace:
                        type=int, default=PRE_EPOCHS)
     train.add_argument('--psnr-checkpoint', help='Specify an existing trained '
                        'model for the PSNR-based training phase.', type=str)
+    train.add_argument('--scale-factor', help='Factor to upscale the image in '
+                       'each direction.', type=int, choices=[2, 4])
     train.add_argument('--skip-image-save', help='By default, a sample image '
                        'is generated after every epoch and saved to the '
                        '"outputs/" directory. Add this flag to skip generating '
@@ -276,6 +278,7 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
         args.train_dir,
         batch_size=args.batch_size,
         crop_size=crop_size,
+        upscale_factor=args.scale_factor,
         dataset_multiplier=args.dataset_multiplier,
         workers=args.data_workers,
         distributed=True
@@ -310,6 +313,7 @@ def main() -> None:
                 args.train_dir,
                 batch_size=args.batch_size,
                 crop_size=crop_size,
+                upscale_factor=args.scale_factor,
                 dataset_multiplier=args.dataset_multiplier,
                 workers=args.data_workers,
                 distributed=distributed
