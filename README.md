@@ -105,6 +105,22 @@ for identical functionality. Note that if any changes are made locally to the
 code, the wheel will need to be rebuilt and reinstalled following the steps
 above.
 
+### Subdividing Dataset
+It is recommended to subdivide the images in the dataset into smaller croppings
+prior to initiating training. These smaller croppings make it easier to sample
+more diverse images from the dataset as sampling from each small cropping
+increases the likelihood that each sample is unique.
+
+A subdivision tool has been included to make this process easier. To subdivide
+an existing dataset, run the following (replacing the paths as needed):
+
+```bash
+torchsr subdivide path/to/original/dataset new/subdivided/path
+```
+
+This will create a new directory at `new/subdivided/path` with the subdivided
+images. For training, this new directory should be used for the `train-dir`.
+
 ## Running
 With the application fully configured and installed, training can begin. TorchSR
 attempts to automatically set as many parameters as possible to make the

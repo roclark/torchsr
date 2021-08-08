@@ -22,7 +22,7 @@ from torchsr.constants import (BATCH_SIZE,
                                MODEL,
                                PRE_EPOCHS,
                                TRAIN_DIR)
-from torchsr.dataset import initialize_datasets
+from torchsr.dataset import initialize_datasets, subdivide_images
 from torchsr.test import test
 from torchsr.models import MODELS, select_test_model, select_trainer_model
 from torchsr.__version__ import VERSION
@@ -212,6 +212,20 @@ def parse_args() -> Namespace:
     test.add_argument('--model', help='Select the model to use for super '
                       'resolution.', choices=MODELS.keys(), type=str,
                       default=MODEL)
+    subdivide = commands.add_parser('subdivide', help='Subdivide dataset into '
+                                    'smaller croppings of images which are '
+                                    'saved to the local filesystem. Images '
+                                    'are cropped to 480x480 sections (if '
+                                    'possible) which allows for more uniform '
+                                    'samples from each sub-image as opposed '
+                                    'to taking a random sample from a large '
+                                    'image. This aids in diversity of scenes '
+                                    'in the dataset for a more general model.')
+    subdivide.add_argument('dataset', type=str, help='Specify the location to '
+                           'the directory where training images are stored.')
+    subdivide.add_argument('output_directory', metavar='output-directory',
+                           type=str, help='Specify the new location to save '
+                           'subdivided images to.')
     return parser.parse_args()
 
 
@@ -287,14 +301,18 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
 
 def main() -> None:
     args = parse_args()
-    gpus = gpu_count(args.gpus)
-    device = get_device(gpus)
-    distributed = gpus > 1
-    train_class, crop_size = select_trainer_model(args)
+
+    if 'gpus' in args:
+        gpus = gpu_count(args.gpus)
+        device = get_device(gpus)
+        distributed = gpus > 1
+        train_class, crop_size = select_trainer_model(args)
     
     if args.function == 'test':
         model = select_test_model(args)
         test(args, model, device)
+    elif args.function == 'subdivide':
+        subdivide_images(args.dataset, args.output_directory)
     else:
         if distributed:
             # Hard-coded for single node at the moment.

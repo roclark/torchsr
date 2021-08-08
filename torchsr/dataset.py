@@ -10,6 +10,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import cv2
+import numpy as np
 import os
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -23,9 +25,12 @@ from torchvision.transforms import (Compose,
                                     ToPILImage,
                                     ToTensor)
 from torchvision.transforms.functional import InterpolationMode
+from tqdm import tqdm
 from typing import Tuple
 
 
+MAX_CROP = 128  # Maximum size that images will be cropped to for training
+SUBDIVISION_DIMS = 480  # Dimensions to attempt to crop images to
 SUPPORTED_IMAGES = ('.jpg', '.jpeg', '.png')
 
 
@@ -50,6 +55,102 @@ def _image_dataset(directory: str) -> list:
     images = [os.path.join(directory, fn) for fn in os.listdir(directory)
               if fn.lower().endswith(SUPPORTED_IMAGES)]
     return images
+
+
+def _save_image(image: np.array, image_name: str, row: int,
+                column: int, height: int, width: int) -> None:
+    """
+    Save a subdivided image to the local filesystem.
+
+    Given an image and dimensions to start a crop at for the image, determine
+    if the image subset is greater than or equal to the MAX_CROP constant to
+    ensure that the subdivided image can be used for all models which take a
+    random sample from each sub-image. If the subsection is smaller, take the
+    final MAX_CROP pixels for the necessary dimension(s) to represent the
+    subdivided image. This will have overlap in some of the training images,
+    but better to have minimal overlap than less diversity.
+
+    Parameters
+    ----------
+    image : numpy array
+        A ``numpy array`` representing the image to subdivide.
+    image_name : str
+        A ``string`` of the name to save the new subdivided image as.
+    row : int
+        An ``int`` of the row to begin taking the sample from.
+    column : int
+        An ``int`` of the column to begin taking the sample from.
+    height : int
+        An ``int`` of the overall height of the input image in pixels.
+    width : int
+        An ``int`` of the overall width of the input image in pixels.
+    """
+    # Row is too narrow - need to overlap with previous section if possible.
+    if height - (row + SUBDIVISION_DIMS) < MAX_CROP:
+        if height - MAX_CROP < 0:
+            print('Requested image is too narrow to be subdivided. Skipping.')
+            return
+        row = max(height - SUBDIVISION_DIMS, 0)
+    # Column is too narrow - need to overlap with previous section if possible.
+    if width - (column + SUBDIVISION_DIMS) < MAX_CROP:
+        if width - MAX_CROP < 0:
+            print('Requested image is too short to be subdivided. Skipping.')
+            return
+        column = max(width - SUBDIVISION_DIMS, 0)
+
+    cv2.imwrite(image_name,
+        image[
+            row: row + SUBDIVISION_DIMS,
+            column: column + SUBDIVISION_DIMS,
+            :
+        ]
+    )
+
+
+def subdivide_images(directory: str, out_dir: str) -> None:
+    """
+    Subdivide images into smaller chunks to sample from.
+
+    To ensure samples from the images are taken from unique locations in each
+    image, each image should be subdivided into 480x480 subsets (if possible).
+    To capture the actual dataset, a random cropping within each subset will be
+    sampled to minimize overlapping images in the dataset.
+
+    The subdivided images will be saved to a new directory which should then be
+    used for the new training dataset for future runs.
+
+    Parameters
+    ----------
+    directory : str
+        A ``string`` of the directory containing images to sample.
+    out_dir : str
+        A ``string`` of the directory to save subdivided images to.
+    """
+    print('Subdividing training dataset into smaller croppings')
+    print('Images will be saved to the specified output directory')
+    print('This may take some time...')
+
+    images = _image_dataset(directory)
+    os.makedirs(out_dir, exist_ok=True)
+
+    for image_name in tqdm(images):
+        image = cv2.imread(image_name)
+
+        if image.ndim == 2:
+            height, width = image.shape
+        elif image.ndim == 3:
+            height, width, _ = image.shape
+
+        filepath, extension = os.path.splitext(image_name)
+        filename = os.path.basename(filepath)
+        new_path = os.path.join(out_dir, filename)
+        sub_image = 0
+
+        for row in range(0, height, SUBDIVISION_DIMS):
+            for column in range(0, width, SUBDIVISION_DIMS):
+                sub_image_name = f'{new_path}_{sub_image}{extension}'
+                sub_image += 1
+                _save_image(image, sub_image_name, row, column, height, width)
 
 
 class TrainData(Dataset):
@@ -119,6 +220,9 @@ class TrainData(Dataset):
             images, respectively.
         """
         image = Image.open(self.images[index])
+        height, width = image.size
+        if height < MAX_CROP or width < MAX_CROP:
+            print(self.images[index])
 
         high_res = self.hr_transform(image)
         low_res = self.lr_transform(high_res)
