@@ -10,7 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from setuptools import find_packages, setup
+from setuptools import setup
 from torchsr.__version__ import VERSION
 
 with open('README.md', 'r') as f:
@@ -29,7 +29,11 @@ setup(
     version=VERSION,
     description='An easy-to-use tool to create super resolution images',
     long_description=long_description,
-    packages=find_packages(include=['torchsr']),
+    packages=[
+        'torchsr',
+        'torchsr/esrgan',
+        'torchsr/srgan'
+    ],
     license='Apache 2.0',
     python_requires='>=3.6',
     entry_points={
