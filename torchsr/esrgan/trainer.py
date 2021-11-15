@@ -65,6 +65,7 @@ class ESRGANTrainer:
                  test_loader: DataLoader, train_len: int, test_len: int,
                  distributed: bool = False) -> None:
         self.amp = not args.disable_amp
+        self.batch_size = args.batch_size
         self.best_psnr = -1.0
         self.device = device
         self.distributed = distributed
@@ -78,6 +79,7 @@ class ESRGANTrainer:
         self.test_len = test_len
         self.train_loader = train_loader
         self.train_len = train_len
+        self.world_size = args.world_size
         # For using a single process, the default rank is -1 for the first and
         # only process.
         self.main_process = args.local_rank in [-1, 0]
@@ -164,13 +166,13 @@ class ESRGANTrainer:
         )
         self.disc_scheduler = torch.optim.lr_scheduler.StepLR(
             self.disc_optimizer,
-            step_size=self.epochs // 2,
-            gamma=0.1
+            step_size=self.epochs // 8,
+            gamma=0.6
         )
         self.gen_scheduler = torch.optim.lr_scheduler.StepLR(
             self.gen_optimizer,
-            step_size=self.epochs // 2,
-            gamma=0.1
+            step_size=self.epochs // 8,
+            gamma=0.6
         )
         self.scaler = amp.GradScaler(enabled=self.amp)
 
@@ -289,7 +291,7 @@ class ESRGANTrainer:
 
             start_time = time.time()
 
-            for _, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
+            for sub_step, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
                 high_res = high_res.to(self.device)
                 low_res = low_res.to(self.device)
 
@@ -303,6 +305,10 @@ class ESRGANTrainer:
                 self.scaler.step(self.psnr_optimizer)
                 self.scaler.update()
 
+                if self.writer and self.main_process:
+                    step = sub_step + (epoch * len(self.train_loader))
+                    self.writer.add_scalar('psnr/loss', loss, step)
+
             end_time = time.time()
             time_taken = end_time - start_time
             throughput = self.train_len / time_taken
@@ -310,10 +316,10 @@ class ESRGANTrainer:
             self._log(f'Throughput: {round(throughput, 3)} images/sec')
 
             if self.writer and self.main_process:
-                self.writer.add_scalar(f'psnr/throughput/train', throughput, epoch)
+                self.writer.add_scalar('psnr/throughput/train', throughput, epoch)
             self._test(epoch, 'esrgan-psnr')
 
-    def _gan_loop(self, low_res: Tensor, high_res: Tensor) -> None:
+    def _gan_loop(self, low_res: Tensor, high_res: Tensor, step: int) -> None:
         """
         Run the main GAN-based training loop.
 
@@ -329,6 +335,8 @@ class ESRGANTrainer:
         high_res : Tensor
             A ``tensor`` of a batch of high resolution images from the training
             dataset.
+        step : int
+            An ``int`` of the current step the training loop is on.
         """
         low_res = low_res.to(self.device)
         high_res = high_res.to(self.device)
@@ -363,6 +371,11 @@ class ESRGANTrainer:
             content_loss = self.vgg_loss(super_res, high_res.detach())
             adversarial_loss = self.bce_loss(fake_output - torch.mean(real_output), real_label)
             gen_loss = 0.01 * pixel_loss + 1 * content_loss + 0.005 * adversarial_loss
+
+        if self.writer and self.main_process:
+            self.writer.add_scalar('gan/disc-lr', self.disc_scheduler.get_last_lr()[0], step)
+            self.writer.add_scalar('gan/gen-lr', self.gen_scheduler.get_last_lr()[0], step)
+            self.writer.add_scalar('gan/loss', gen_loss, step)
 
         self.scaler.scale(gen_loss).backward()
         self.scaler.step(self.gen_optimizer)
@@ -399,8 +412,10 @@ class ESRGANTrainer:
 
             start_time = time.time()
 
-            for _, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
-                self._gan_loop(low_res, high_res)
+            for sub_step, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
+                step = (sub_step * self.batch_size * self.world_size) + \
+                       ((epoch - 1) * len(self.train_loader) * self.batch_size * self.world_size)
+                self._gan_loop(low_res, high_res, step)
 
             end_time = time.time()
             time_taken = end_time - start_time
@@ -422,5 +437,8 @@ class ESRGANTrainer:
         network.
         """
         self._pretrain()
+        # Clear the GPU cache between pre-training and main training phases to
+        # optimize memory usage during extended runtime.
+        torch.cuda.empty_cache()
         self._gan_train()
         self._cleanup()

@@ -302,6 +302,7 @@ def main() -> None:
             # Hard-coded for single node at the moment.
             nodes = 1
             world_size = gpus * nodes
+            args.world_size = world_size
             torch.multiprocessing.spawn(
                 worker_process,
                 nprocs=gpus,
@@ -317,6 +318,7 @@ def main() -> None:
                 distributed=distributed
             )
             args.local_rank = -1
+            args.world_size = 1
             trainer = train_class(device, args, train_loader, test_loader,
                                   train_len, test_len)
             trainer.train()
