@@ -398,4 +398,4 @@ def initialize_datasets(train_directory: str, batch_size: int,
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
                                crop_size=crop_size, workers=workers,
                                distributed=distributed)
-    return trainloader, testloader, len(train_data), len(test_data)
+    return trainloader, testloader, len(trainloader) * batch_size, len(testloader)

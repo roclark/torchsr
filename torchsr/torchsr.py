@@ -280,6 +280,8 @@ def worker_process(local_rank: int, world_size: int, device: torch.device,
         workers=args.data_workers,
         distributed=True
     )
+    train_len *= world_size
+    test_len *= world_size
     trainer = train_class(device, args, train_loader, test_loader, train_len,
                           test_len, distributed=True)
     trainer.train()
