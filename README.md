@@ -13,6 +13,7 @@ repository:
 * Operating System: Linux-based (tested on Ubuntu 20.04)
 * Recommended CPU Cores: 4 or higher
 * Recommended system Memory: 16GB or higher
+* Docker Version: 19.03 or newer (if using Docker)
 
 The application also supports TensorBoard for performance and accuracy metrics.
 If desired, TensorBoard 2.1.0 or newer can be installed to monitor these
@@ -26,6 +27,7 @@ supports recent GPUs from NVIDIA with the following requirements:
 * Driver Version: 450 or newer
 * GPU Architecture: Volta or newer
 * Recommended GPU Memory: 8GB or higher
+* NVIDIA Container Runtime (if using Docker)
 
 For multi-GPU communication over NCCL, NVLink is highly recommended.
 
@@ -104,6 +106,35 @@ replace any `torchsr ...` commands below with `python3 -m torchsr.torchsr ...`
 for identical functionality. Note that if any changes are made locally to the
 code, the wheel will need to be rebuilt and reinstalled following the steps
 above.
+
+### Docker
+The repository also supports Docker containers where the package can be prebuilt
+and installed in a container with known dependencies installed. To build the
+container, clone the repository and run the following inside the repository's
+root directory:
+
+```
+docker build -t torchsr:0.1.0 .
+```
+
+This will build a new Docker container with the latest requirements and code.
+
+To launch the container, run the following:
+
+```
+docker run --rm -it \
+    --gpus all \  # If using GPUs
+    -v /path/to/dataset:/dataset \
+    --shm-size=16g \
+    torchsr:0.1.0
+```
+
+Update the `-v /path/to/dataset:/dataset` to the path to where the dataset was
+downloaded during the setup. This will map the directory inside the container
+where it can be used freely. Omit the `--gpus all` flag if not using GPUs.
+
+Once inside the container, the `torchsr` command is in the PATH and all commands
+below will run by default.
 
 ## Running
 With the application fully configured and installed, training can begin. TorchSR

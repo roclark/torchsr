@@ -1,0 +1,6 @@
+*dataset*
+output/
+runs/*
+*__pycache__*
+*png
+*jpg
