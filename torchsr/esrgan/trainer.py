@@ -246,7 +246,7 @@ class ESRGANTrainer:
                 self.writer.add_scalar(f'{short_phase}/PSNR', psnr, epoch)
                 self.writer.add_scalar(f'{short_phase}/throughput/test', throughput, epoch)
 
-            if psnr > self.best_psnr:
+            if psnr > self.best_psnr and self.main_process:
                 self.best_psnr = psnr
                 torch.save(self.generator.state_dict(), f'{phase}-best.pth')
             if self.main_process:
