@@ -106,6 +106,30 @@ class ESRGANTrainer:
         if self.writer:
             self.writer.close()
 
+    def _load_checkpoint(self, path: str) -> dict:
+        """
+        Load a pre-trained checkpoint of a specific name.
+
+        Check if a checkpoint exists, and if so, load and return the checkpoint.
+        If no checkpoint is found, return None.
+
+        Parameters
+        ----------
+        path : str
+            A ``string`` of the path to load the checkpoint from.
+
+        Returns
+        -------
+        dict
+            Returns a ``dict`` of the loaded model and metadata. Returns `None`
+            if no checkpoint can be found.
+        """
+        if os.path.exists(path):
+            checkpoint = torch.load(path)
+            return checkpoint
+        else:
+            return None
+
     def _create_test_image(self) -> None:
         """
         Load the test image to be used to verify the model after every epoch.
@@ -308,9 +332,13 @@ class ESRGANTrainer:
         self._log('=' * 80)
         self._log('Starting pre-training')
         epoch = 1
+        path = 'esrgan-psnr-latest.pth'
 
         if self.psnr_checkpoint:
-            checkpoint = torch.load(self.psnr_checkpoint)
+            path = self.psnr_checkpoint
+
+        checkpoint = self._load_checkpoint(path)
+        if checkpoint:
             self.generator.load_state_dict(checkpoint["state"])
             epoch = checkpoint["epoch"]
 
@@ -431,11 +459,17 @@ class ESRGANTrainer:
             if self.gan_checkpoint:
                 path = self.gan_checkpoint
             else:
-                path = 'esrgan-psnr-best.pth'
-            checkpoint = torch.load(path)
-            self.generator.load_state_dict(checkpoint["state"])
-            if self.gan_checkpoint:
+                path = 'esrgan-gan-latest.pth'
+            checkpoint = self._load_checkpoint(path)
+            # Prefer loading an existing GAN-based model before PSNR-based
+            # model as a better base.
+            if checkpoint:
+                self.generator.load_state_dict(checkpoint["state"])
                 epoch = checkpoint["epoch"]
+            else:
+                checkpoint = self._load_checkpoint('esrgan-psnr-latest.pth')
+                if checkpoint:
+                    self.generator.load_state_dict(checkpoint["state"])
         except FileNotFoundError:
             print('Pre-trained file not found. Training GAN from scratch.')
 
