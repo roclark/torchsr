@@ -106,6 +106,30 @@ class SRGANTrainer:
         if self.writer:
             self.writer.close()
 
+    def _load_checkpoint(self, path: str) -> dict:
+        """
+        Load a pre-trained checkpoint of a specific name.
+
+        Check if a checkpoint exists, and if so, load and return the checkpoint.
+        If no checkpoint is found, return None.
+
+        Parameters
+        ----------
+        path : str
+            A ``string`` of the path to load the checkpoint from.
+
+        Returns
+        -------
+        dict
+            Returns a ``dict`` of the loaded model and metadata. Returns `None`
+            if no checkpoint can be found.
+        """
+        if os.path.exists(path):
+            checkpoint = torch.load(path)
+            return checkpoint
+        else:
+            return None
+
     def _create_test_image(self) -> None:
         """
         Load the test image to be used to verify the model after every epoch.
@@ -197,6 +221,33 @@ class SRGANTrainer:
         if self.main_process:
             print(statement)
 
+    def _model_state(self, epoch: int, phase: str) -> dict:
+        """
+        Create a model save state with metadata.
+
+        Various metadata points related to training are valuable to be included
+        in the checkpoint to make it easier to pickup progress where it was
+        left off while continuing from an existing checkpoint.
+
+        Parameters
+        ----------
+        epoch : int
+            An ``int`` of the current epoch in the training pass.
+        phase : str
+            A ``string`` of the current training phase.
+
+        Returns
+        -------
+        dict
+            Returns a ``dict`` of the latest model state including metadata
+            information.
+        """
+        return {
+            "epoch": epoch,
+            "phase": phase,
+            "state": self.generator.state_dict()
+        }
+
     def _test(self, epoch: int, phase: str) -> None:
         """
         Run a test pass against the test dataset and sample image.
@@ -246,11 +297,13 @@ class SRGANTrainer:
                 self.writer.add_scalar(f'{short_phase}/PSNR', psnr, epoch)
                 self.writer.add_scalar(f'{short_phase}/throughput/test', throughput, epoch)
 
-            if psnr > self.best_psnr:
+            if psnr > self.best_psnr and self.main_process:
                 self.best_psnr = psnr
-                torch.save(self.generator.state_dict(), f'{phase}-best.pth')
+                torch.save(self._model_state(epoch, phase),
+                           f'{phase}-best.pth')
             if self.main_process:
-                torch.save(self.generator.state_dict(), f'{phase}-latest.pth')
+                torch.save(self._model_state(epoch, phase),
+                           f'{phase}-latest.pth')
 
             # If the user requested to not save images, return immediately and
             # avoid generating and saving the image.
@@ -278,11 +331,18 @@ class SRGANTrainer:
         """
         self._log('=' * 80)
         self._log('Starting pre-training')
+        epoch = 1
+        path = 'srgan-psnr-latest.pth'
 
         if self.psnr_checkpoint:
-            self.generator.load_state_dict(torch.load(self.psnr_checkpoint))
+            path = self.psnr_checkpoint
 
-        for epoch in range(1, self.pre_epochs + 1):
+        checkpoint = self._load_checkpoint(path)
+        if checkpoint:
+            self.generator.load_state_dict(checkpoint["state"])
+            epoch = checkpoint["epoch"]
+
+        for epoch in range(epoch, self.pre_epochs + 1):
             self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.pre_epochs}')
 
@@ -379,18 +439,28 @@ class SRGANTrainer:
         """
         self._log('=' * 80)
         self._log('Starting training loop')
+        epoch = 1
 
         self.best_psnr = -1.0
         try:
             if self.gan_checkpoint:
                 path = self.gan_checkpoint
             else:
-                path = 'srgan-psnr-best.pth'
-            self.generator.load_state_dict(torch.load(path))
+                path = 'srgan-gan-latest.pth'
+            checkpoint = self._load_checkpoint(path)
+            # Prefer loading an existing GAN-based model before PSNR-based
+            # model as a better base.
+            if checkpoint:
+                self.generator.load_state_dict(checkpoint["state"])
+                epoch = checkpoint["epoch"]
+            else:
+                checkpoint = self._load_checkpoint('srgan-psnr-latest.pth')
+                if checkpoint:
+                    self.generator.load_state_dict(checkpoint["state"])
         except FileNotFoundError:
             print('Pre-trained file not found. Training GAN from scratch.')
 
-        for epoch in range(1, self.epochs + 1):
+        for epoch in range(epoch, self.epochs + 1):
             self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.epochs}')
 
