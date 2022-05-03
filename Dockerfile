@@ -1,4 +1,4 @@
-FROM ubuntu:focal-20210416 as build
+FROM ubuntu:focal-20220415 as build
 
 RUN apt update && \
     apt install -y python3-dev \
@@ -17,7 +17,7 @@ COPY README.md .
 
 RUN python3 setup.py bdist_wheel
 
-FROM nvcr.io/nvidia/cuda:11.4.2-base-ubuntu20.04
+FROM nvcr.io/nvidia/cuda:11.3.0-base-ubuntu20.04
 
 WORKDIR /torchsr
 

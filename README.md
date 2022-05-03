@@ -168,12 +168,25 @@ for each epoch. Using the `--dataset-multiplier` flag increases the number of
 random samples from each image, growing the total dataset size without
 increasing on-disk requirements. The number for the multiplier is the number of
 random samples to take from every image.
-* `--gpus N`: By default, TorchSR will run on as many supported GPUs as
-available on the system. To use fewer GPUs, pass in the desired amount of GPUs
-per system. To run in CPU-only mode, specify `--gpus 0`. Note that CPU-only mode
-will be an order of magnitude slower than a single GPU if not more.
 * `--train-dir <directory>`: If the dataset is saved in a directory other than
 `dataset/`, specify the location by passing it to `--train-dir`.
+
+### Distributed Training
+TorchSR can be run on multiple GPUs to greatly accelerate training by using the
+`torchrun` binary included with modern versions of PyTorch. To launch a
+multi-GPU training pass, modify how the application is called by adding
+`torchrun --nproc_per_node=X` before your command. For example:
+
+```bash
+# Original 1-GPU command:
+torchsr train --dataset-multiplier 10
+
+# Equivalent command running on 8 GPUs on a single node:
+torchrun --nproc_per_node=8 -m torchsr.torchsr train --dataset-multiplier 10
+```
+
+While running distributed training, the dataset will be divided between each
+GPU, reducing the overall time needed to complete a single epoch.
 
 ### Monitoring
 To help view progress while training, a validation image is generated based on
