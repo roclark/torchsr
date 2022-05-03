@@ -124,16 +124,25 @@ def distributed_params(args: Namespace) -> Tuple[Namespace, bool]:
             args.master_port = str(os.environ['MASTER_PORT'])
         distributed = True
     except (KeyError, ValueError):
-        # Distributed-mode was not called, so set the default values for single
-        # worker mode.
+        # Check if the user called the application using Slurm and get the
+        # values from Slurm.
+        try:
+            args.world_size = int(os.environ['SLURM_NTASKS'])
+            args.rank = int(os.environ['SLURM_PROCID'])
+            args.local_rank = int(os.environ['SLURM_LOCALID'])
+            args.local_world_size = int(os.environ['SLURM_NTASKS_PER_NODE'])
+            os.environ['RANK'] = str(args.rank)
+            os.environ['WORLD_SIZE'] = str(args.world_size)
+            distributed = True
+        except (KeyError, ValueError):
+            # Distributed-mode was not called, so set the default values for
+            # single worker mode.
+            distributed = False
+    if not distributed:
         args.world_size = 1
         args.rank = -1
         args.local_rank = -1
         args.local_world_size = 1
-    if args.world_size > 1:
-        distributed = True
-    else:
-        distributed = False
     return args, distributed
 
 
@@ -227,7 +236,7 @@ def main() -> None:
         test(args, model, device)
     else:
         if distributed:
-            dist.init_process_group(backend='nccl', init_method='env://')
+            dist.init_process_group(backend='nccl')
         train_loader, test_loader, train_len, test_len = initialize_datasets(
             args.train_dir,
             batch_size=args.batch_size,

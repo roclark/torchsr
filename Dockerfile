@@ -19,6 +19,8 @@ RUN python3 setup.py bdist_wheel
 
 FROM nvcr.io/nvidia/cuda:11.3.0-base-ubuntu20.04
 
+ENV MASTER_PORT 29500
+
 WORKDIR /torchsr
 
 RUN apt update && \
@@ -29,7 +31,13 @@ COPY --from=build /build/dist .
 COPY requirements.txt .
 COPY media/waterfalls-low-res.png media/waterfalls-low-res.png
 
+# Set the MASTER_ADDR variable for Slurm-based jobs if possible. This will only
+# be set if found to be running in a Slurm job. If not, it will be left empty
+# and functionality will not change from the expected behavior.
+RUN echo "export MASTER_ADDR=\$(hostlist -l 1 \"\${SLURM_NODELIST}\")" >> /etc/profile.d/50-slurm-addr.sh
+
 RUN pip3 install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cu113 \
     -r requirements.txt \
     python-hostlist \
     torchsr-0.1.0-py3-none-any.whl && \
