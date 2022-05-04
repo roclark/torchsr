@@ -6,8 +6,8 @@ images by 4x in each direction.
 The following hardware and software versions are required to properly use this
 repository:
 
-* Python Version: 3.6 or newer (including PIP)
-* PyTorch Version: 1.7.0 or newer
+* Python Version: 3.7 or newer (including PIP)
+* PyTorch Version: 1.10.0 or newer (`torchrun` binary required for distributed)
 * Pillow Version: 7.1.2 or newer
 * Scikit-Learn Version: 0.18.2 or newer
 * Operating System: Linux-based (tested on Ubuntu 20.04)
@@ -59,8 +59,8 @@ rm -rf Flickr2K
 rm Flickr2K.tar
 ```
 
-**NOTE:** While most any high-resolution dataset can be use for training, it
-is recommended to only images saved in the PNG format as JPEGs can introduce
+**NOTE:** While most any high-resolution dataset can be used for training, it is
+recommended to only use images saved in the PNG format as JPEGs can introduce
 artifacts on the images due to their lossy nature.
 
 ### Installation
@@ -168,12 +168,57 @@ for each epoch. Using the `--dataset-multiplier` flag increases the number of
 random samples from each image, growing the total dataset size without
 increasing on-disk requirements. The number for the multiplier is the number of
 random samples to take from every image.
-* `--gpus N`: By default, TorchSR will run on as many supported GPUs as
-available on the system. To use fewer GPUs, pass in the desired amount of GPUs
-per system. To run in CPU-only mode, specify `--gpus 0`. Note that CPU-only mode
-will be an order of magnitude slower than a single GPU if not more.
 * `--train-dir <directory>`: If the dataset is saved in a directory other than
 `dataset/`, specify the location by passing it to `--train-dir`.
+
+### Distributed Training
+TorchSR can be run on multiple GPUs to greatly accelerate training by using the
+`torchrun` binary included with modern versions of PyTorch. To launch a
+multi-GPU training pass, modify how the application is called by adding
+`torchrun --nproc_per_node=X` before your command. For example:
+
+```bash
+# Original 1-GPU command:
+torchsr train --dataset-multiplier 10
+
+# Equivalent command running on 8 GPUs on a single node:
+torchrun --nproc_per_node=8 -m torchsr.torchsr train --dataset-multiplier 10
+```
+
+While running distributed training, the dataset will be divided between each
+GPU, reducing the overall time needed to complete a single epoch.
+
+### Slurm (GPU only)
+TorchSR supports running on Slurm clusters using [Pyxis](https://github.com/NVIDIA/pyxis)
+and [Enroot](https://github.com/NVIDIA/enroot). To run on a Slurm cluster with
+Pyxis and Enroot, build the Docker image following the steps above and push the
+image to a container registry of your choice using
+`docker push <image name:tag>`. To launch a training job on Slurm, create an
+sbatch file named `distributed.sh` with the following contents:
+
+```bash
+#!/bin/bash
+#SBATCH --exclusive
+#SBATCH --ntasks-per-node=8
+
+srun \
+    --gres=gpu:8 \
+    --container-image <image name:tag here> \
+    --container-mounts=/path/to/dataset:/dataset \
+    torchsr train \
+        --train-dir /dataset \
+        --dataset-multiplier 10
+```
+
+Modify the `--ntasks-per-node=X` and `--gres=gpu:X` values to match the expected
+number of GPUs available per node. Replace `<image name:tag here>` with the name
+specified during the Docker image build above. Replace the `/path/to/dataset`
+with the location of your dataset.
+
+To launch the Slurm job, run `sbatch --nodes=X distributed.sh` and specify the
+number of nodes to run on with the `--nodes=X` flag. This will create a file in
+the local directory named `slurm-XXXX.out` where `XXXX` is the job ID. This file
+contains information related to the training job.
 
 ### Monitoring
 To help view progress while training, a validation image is generated based on

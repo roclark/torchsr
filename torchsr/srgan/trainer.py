@@ -82,7 +82,7 @@ class SRGANTrainer:
         self.world_size = args.world_size
         # For using a single process, the default rank is -1 for the first and
         # only process.
-        self.main_process = args.local_rank in [-1, 0]
+        self.main_process = args.rank in [-1, 0]
 
         if device == torch.device('cuda'):
             torch.cuda.set_device(args.local_rank)
