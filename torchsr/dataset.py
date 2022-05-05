@@ -162,11 +162,15 @@ class TestData(Dataset):
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    dataset_multiplier : int
+        An ``int`` of the amount to augment the dataset to increase the number
+        of samples per image.
     """
-    def __init__(self, dataset: list, crop_size: int = 96, upscale_factor: int = 4) -> None:
+    def __init__(self, dataset: list, crop_size: int = 96, upscale_factor: int = 4,
+                 dataset_multiplier: int = 1) -> None:
         super(TestData, self).__init__()
         self.upscale_factor = upscale_factor
-        self.images = dataset
+        self.images = dataset * dataset_multiplier
 
         self.lr_transform = Compose([
             ToPILImage(),
@@ -290,6 +294,7 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
 def _test_dataset(test_subset: list,
                   upscale_factor: int = 4,
                   crop_size: int = 96,
+                  dataset_multiplier: int = 1,
                   workers: int = 16,
                   distributed: bool = False) -> DataLoader:
     """
@@ -309,6 +314,9 @@ def _test_dataset(test_subset: list,
         An ``int`` of the size to crop the high resolution images to in pixels.
         The size is used for both the height and width, ie. a crop_size of `96`
         will take a 96x96 section of the input image.
+    dataset_multiplier : int
+        An ``int`` of the amount to augment the dataset to increase the number
+        of samples per image.
     workers : int
         An ``int`` of the number of workers to use for loading and
         preprocessing images.
@@ -322,7 +330,8 @@ def _test_dataset(test_subset: list,
         Returns a ``DataLoader`` instance of the testing dataset.
     """
     test_data = TestData(test_subset, crop_size=crop_size,
-                         upscale_factor=upscale_factor)
+                         upscale_factor=upscale_factor,
+                         dataset_multiplier=dataset_multiplier)
     if distributed:
         test_sampler = DistributedSampler(test_data)
         testloader = DataLoader(
@@ -396,6 +405,7 @@ def initialize_datasets(train_directory: str, batch_size: int,
                                  workers=workers,
                                  distributed=distributed)
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
-                               crop_size=crop_size, workers=workers,
-                               distributed=distributed)
+                               crop_size=crop_size,
+                               dataset_multiplier=dataset_multiplier,
+                               workers=workers, distributed=distributed)
     return trainloader, testloader, len(trainloader) * batch_size, len(testloader)
