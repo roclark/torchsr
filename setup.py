@@ -31,6 +31,7 @@ setup(
     long_description=long_description,
     packages=[
         'torchsr',
+        'torchsr/base',
         'torchsr/esrgan',
         'torchsr/srgan'
     ],
