@@ -16,14 +16,14 @@ import torch
 import torch.cuda.amp as amp
 import torch.optim as optim
 import torchvision.utils as utils
+try:
+    import wandb
+except ImportError:
+    wandb = None
 from argparse import Namespace
 from torch import Tensor
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except ImportError:
-    SummaryWriter = None
 from torchvision.transforms.functional import InterpolationMode
 from torchvision.transforms.transforms import Resize, ToTensor
 from math import log10
@@ -87,11 +87,6 @@ class ESRGANTrainer:
         if device == torch.device('cuda'):
             torch.cuda.set_device(args.local_rank)
 
-        if SummaryWriter:
-            self.writer = SummaryWriter()
-        else:
-            self.writer = None
-
         if self.save_image and self.main_process \
            and not os.path.exists('output'):
             os.makedirs('output')
@@ -103,8 +98,8 @@ class ESRGANTrainer:
         """
         Remove and close any unnecessary items.
         """
-        if self.writer:
-            self.writer.close()
+        if wandb:
+            wandb.finish()
 
     def _load_checkpoint(self, path: str) -> dict:
         """
@@ -221,6 +216,20 @@ class ESRGANTrainer:
         if self.main_process:
             print(statement)
 
+    def _log_wandb(self, contents: dict, step: int = None) -> None:
+        """
+        Log a dictionary of contents to Weights and Biases if configured.
+
+        Parameters
+        ----------
+        contents : dict
+            A ``dictionary`` of information to log to Weights and Biases.
+        step : int
+            An ``int`` of the current step.
+        """
+        if wandb and self.main_process:
+            wandb.log(contents, step=step)
+
     def _model_state(self, epoch: int, phase: str) -> dict:
         """
         Create a model save state with metadata.
@@ -248,7 +257,7 @@ class ESRGANTrainer:
             "state": self.generator.state_dict()
         }
 
-    def _test(self, epoch: int, phase: str) -> None:
+    def _test(self, epoch: int, phase: str, step: int) -> None:
         """
         Run a test pass against the test dataset and sample image.
 
@@ -267,13 +276,15 @@ class ESRGANTrainer:
             An ``int`` of the current epoch in the training pass.
         phase : str
             A ``string`` of the current training phase.
+        step : int
+            An ``int`` of the current step in the training pass.
         """
         self.generator.eval()
 
         self._log(f'Testing results after epoch {epoch}')
 
         with torch.no_grad():
-            psnr = 0.0
+            loss, psnr = 0.0, 0.0
             start_time = time.time()
 
             for low_res, _, high_res in tqdm(self.test_loader, disable=not self.main_process):
@@ -284,18 +295,28 @@ class ESRGANTrainer:
 
                 psnr += 10 * log10(1 / ((super_res - high_res) ** 2).mean().item())
 
+                loss += self.l1_loss(super_res, high_res)
+
             end_time = time.time()
             time_taken = end_time - start_time
-            throughput = self.test_len / time_taken
+            throughput = len(self.test_loader) * self.world_size / time_taken
             psnr = psnr / len(self.test_loader)
+            loss = loss / len(self.test_loader)
 
             self._log(f'PSNR: {round(psnr, 3)}, '
                       f'Throughput: {round(throughput, 3)} images/sec')
-            if self.writer and self.main_process:
-                # Strip so we get just the short phase, ie 'gan' or 'psnr'
-                short_phase = ''.join(phase.split('-')[1:])
-                self.writer.add_scalar(f'{short_phase}/PSNR', psnr, epoch)
-                self.writer.add_scalar(f'{short_phase}/throughput/test', throughput, epoch)
+
+            # Strip so we get just the short phase, ie 'gan' or 'psnr'
+            short_phase = ''.join(phase.split('-')[1:])
+            self._log_wandb(
+                {
+                    f'{short_phase}/PSNR': psnr,
+                    f'{short_phase}/val-loss': loss,
+                    f'{short_phase}/throughput/test': throughput,
+                    f'{short_phase}/epoch': epoch
+                },
+                step=step
+            )
 
             if psnr > self.best_psnr and self.main_process:
                 self.best_psnr = psnr
@@ -314,11 +335,12 @@ class ESRGANTrainer:
             super_res = self.generator(self.test_image).to(self.device)
             utils.save_image(super_res, f'output/SR_epoch{epoch}.png', padding=5)
             _, _, height, width = super_res.shape
-            output_image = Resize((height // 4, width // 4),
-                                  interpolation=InterpolationMode.BICUBIC)(super_res)
-            output_image = utils.make_grid(output_image)
-            if self.writer and self.main_process:
-                self.writer.add_image(f'images/epoch{epoch}', output_image)
+            super_res_resize = Resize((height // 4, width // 4),
+                                       interpolation=InterpolationMode.BICUBIC)(super_res)
+            if wandb:
+                self._log_wandb(
+                    {f'images/epoch{epoch}': wandb.Image(super_res_resize)}
+                )
 
     def _pretrain(self) -> None:
         """
@@ -343,6 +365,8 @@ class ESRGANTrainer:
             epoch = checkpoint["epoch"]
 
         for epoch in range(epoch, self.pre_epochs + 1):
+            step = 0
+
             self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.pre_epochs}')
 
@@ -365,19 +389,31 @@ class ESRGANTrainer:
                 self.scaler.step(self.psnr_optimizer)
                 self.scaler.update()
 
-                if self.writer and self.main_process:
-                    step = sub_step + (epoch * len(self.train_loader))
-                    self.writer.add_scalar('psnr/loss', loss, step)
+                step = (sub_step * self.batch_size * self.world_size) + \
+                       ((epoch - 1) * self.train_len)
+
+                self._log_wandb(
+                    {
+                        'psnr/train-loss': loss,
+                        'psnr/epoch': epoch
+                    },
+                    step=step
+                )
 
             end_time = time.time()
             time_taken = end_time - start_time
-            throughput = self.train_len / time_taken
+            throughput = len(self.train_loader) * self.batch_size * self.world_size / time_taken
 
             self._log(f'Throughput: {round(throughput, 3)} images/sec')
+            self._log_wandb(
+                {
+                    'psnr/throughput/train': throughput,
+                    'psnr/epoch': epoch
+                },
+                step=step
+            )
 
-            if self.writer and self.main_process:
-                self.writer.add_scalar('psnr/throughput/train', throughput, epoch)
-            self._test(epoch, 'esrgan-psnr')
+            self._test(epoch, 'esrgan-psnr', step)
 
     def _gan_loop(self, low_res: Tensor, high_res: Tensor, step: int) -> None:
         """
@@ -432,10 +468,14 @@ class ESRGANTrainer:
             adversarial_loss = self.bce_loss(fake_output - torch.mean(real_output), real_label)
             gen_loss = 0.01 * pixel_loss + 1 * content_loss + 0.005 * adversarial_loss
 
-        if self.writer and self.main_process:
-            self.writer.add_scalar('gan/disc-lr', self.disc_scheduler.get_last_lr()[0], step)
-            self.writer.add_scalar('gan/gen-lr', self.gen_scheduler.get_last_lr()[0], step)
-            self.writer.add_scalar('gan/loss', gen_loss, step)
+        self._log_wandb(
+            {
+                'gan/disc-lr': self.disc_scheduler.get_last_lr()[0],
+                'gan/gen-lr': self.gen_scheduler.get_last_lr()[0],
+                'gan/train-loss': gen_loss
+            },
+            step=step
+        )
 
         self.scaler.scale(gen_loss).backward()
         self.scaler.step(self.gen_optimizer)
@@ -474,6 +514,8 @@ class ESRGANTrainer:
             print('Pre-trained file not found. Training GAN from scratch.')
 
         for epoch in range(epoch, self.epochs + 1):
+            step = 0
+
             self._log('-' * 80)
             self._log(f'Starting epoch {epoch} out of {self.epochs}')
 
@@ -484,22 +526,26 @@ class ESRGANTrainer:
 
             for sub_step, (low_res, high_res) in enumerate(tqdm(self.train_loader, disable=not self.main_process)):
                 step = (sub_step * self.batch_size * self.world_size) + \
-                       ((epoch - 1) * len(self.train_loader) * self.batch_size * self.world_size)
+                       ((self.pre_epochs + epoch - 1) * self.train_len)
                 self._gan_loop(low_res, high_res, step)
 
             end_time = time.time()
             time_taken = end_time - start_time
-            throughput = self.train_len / time_taken
+            throughput = len(self.train_loader) * self.batch_size * self.world_size / time_taken
 
             self._log(f'Throughput: {round(throughput, 3)} images/sec')
-
-            if self.writer and self.main_process:
-                self.writer.add_scalar(f'gan/throughput/train', throughput, epoch)
+            self._log_wandb(
+                {
+                    'gan/throughput/train': throughput,
+                    'gan/epoch': epoch
+                },
+                step=step
+            )
             
             self.disc_scheduler.step()
             self.gen_scheduler.step()
 
-            self._test(epoch, 'esrgan-gan')
+            self._test(epoch, 'esrgan-gan', step)
 
     def train(self) -> None:
         """

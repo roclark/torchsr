@@ -15,9 +15,9 @@ repository:
 * Recommended system Memory: 16GB or higher
 * Docker Version: 19.03 or newer (if using Docker)
 
-The application also supports TensorBoard for performance and accuracy metrics.
-If desired, TensorBoard 2.1.0 or newer can be installed to monitor these
-metrics.
+The application also supports Weights and Biases (WandB) for performance and
+accuracy metrics. If desired, a recent version of the `wandb` Python package can
+be installed via `pip` to monitor these metrics.
 
 ### GPU Requirements
 GPUs can dramatically improve performance by 10x or more. This repository only
@@ -171,6 +171,23 @@ random samples to take from every image.
 * `--train-dir <directory>`: If the dataset is saved in a directory other than
 `dataset/`, specify the location by passing it to `--train-dir`.
 
+### Weights and Biases
+Support for Weights and Biases (WandB) has been included with the repository to
+make it easier to view training progress and share results. To get started,
+signup for a free account on WandB's website and copy your API key from your
+dashboard. To have WandB push your results to its web service automatically,
+simply install the `wandb` Python package and login to WandB from the CLI:
+
+```
+$ pip3 install wandb
+$ wandb login
+wandb: You can find your API key in your browser here: https://wandb.ai/authorize
+wandb: Paste an API key from your profile and hit enter, or press ctrl+c to quit: <Enter API Key Here>
+```
+
+Once logged in, run TorchSR following any of the listed commands on this page.
+Training logs can be viewed at https://wandb.ai.
+
 ### Distributed Training
 TorchSR can be run on multiple GPUs to greatly accelerate training by using the
 `torchrun` binary included with modern versions of PyTorch. To launch a
@@ -219,6 +236,33 @@ To launch the Slurm job, run `sbatch --nodes=X distributed.sh` and specify the
 number of nodes to run on with the `--nodes=X` flag. This will create a file in
 the local directory named `slurm-XXXX.out` where `XXXX` is the job ID. This file
 contains information related to the training job.
+
+If using WandB, prior to launching the job, specify your WandB API key with an
+environment variable:
+
+```
+export WANDB_API_KEY=<Enter your key here>
+```
+
+Next, modify the `distributed.sh` script to the following:
+
+```bash
+#!/bin/bash
+#SBATCH --exclusive
+#SBATCH --ntasks-per-node=8
+
+srun \
+    --gres=gpu:8 \
+    --container-image <image name:tag here> \
+    --container-mounts=/path/to/dataset:/dataset \
+    bash -c 'wandb login && \
+    torchsr train \
+        --train-dir /dataset \
+        --dataset-multiplier 10'
+```
+
+Once modified, the job can be launched as before using `sbatch` and WandB will
+be authenticated and updated automatically.
 
 ### Monitoring
 To help view progress while training, a validation image is generated based on

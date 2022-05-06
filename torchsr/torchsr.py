@@ -13,6 +13,10 @@
 import os
 import torch
 import torch.distributed as dist
+try:
+    import wandb
+except ImportError:
+    wandb = None
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
 from torchsr.constants import (BATCH_SIZE,
@@ -228,6 +232,8 @@ def parse_args() -> Namespace:
 def main() -> None:
     args = parse_args()
     args, distributed = distributed_params(args)
+    if wandb and args.rank in [-1, 0]:
+        wandb.init(config=args, name='TorchSR', project='torchsr')
     device = get_device(args)
     train_class, crop_size = select_trainer_model(args)
     
@@ -245,8 +251,6 @@ def main() -> None:
             workers=args.data_workers,
             distributed=distributed
         )
-        train_len *= args.world_size
-        test_len *= args.world_size
         trainer = train_class(device, args, train_loader, test_loader,
                               train_len, test_len, distributed)
         trainer.train()

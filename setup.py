@@ -17,7 +17,7 @@ with open('README.md', 'r') as f:
     long_description = f.read()
 
 extras = {
-    'tensorboard': ['tensorboard >= 2.4.1']
+    'wandb': ['wandb >= 0.12.15']
 }
 
 extras['all'] = [item for group in extras.values() for item in group]
@@ -35,7 +35,7 @@ setup(
         'torchsr/srgan'
     ],
     license='Apache 2.0',
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     entry_points={
         'console_scripts': ['torchsr=torchsr.torchsr:main']
     },
@@ -43,7 +43,7 @@ setup(
         'numpy >= 1.18.0',
         'Pillow >= 7.1.2',
         'scikit-learn >= 0.18.2',
-        'torch >= 1.7.0',
+        'torch >= 1.10.0',
         'torchvision >= 0.8.0'
     ],
     extras_require=extras
