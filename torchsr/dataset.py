@@ -232,7 +232,8 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
                    upscale_factor: int = 4,
                    dataset_multiplier: int = 1,
                    workers: int = 16,
-                   distributed: bool = False) -> DataLoader:
+                   distributed: bool = False,
+                   seed: int = 0) -> DataLoader:
     """
     Build a training dataset based on the input directory.
 
@@ -262,6 +263,8 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
     distributed : bool
         A ``boolean`` which evaluates to `True` if the application should be
         run in distributed mode.
+    seed : int
+        An ``int`` to use as the seed for random functions.
 
     Returns
     -------
@@ -273,7 +276,7 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
                            upscale_factor=upscale_factor,
                            dataset_multiplier=dataset_multiplier)
     if distributed:
-        train_sampler = DistributedSampler(train_data)
+        train_sampler = DistributedSampler(train_data, seed=seed)
         trainloader = DataLoader(
             dataset=train_data,
             sampler=train_sampler,
@@ -297,7 +300,8 @@ def _test_dataset(test_subset: list,
                   crop_size: int = 96,
                   dataset_multiplier: int = 1,
                   workers: int = 16,
-                  distributed: bool = False) -> DataLoader:
+                  distributed: bool = False,
+                  seed: int = 0) -> DataLoader:
     """
     Build a testing dataset based on the input directory.
 
@@ -327,6 +331,8 @@ def _test_dataset(test_subset: list,
     distributed : bool
         A ``boolean`` which evaluates to `True` if the application should be
         run in distributed mode.
+    seed : int
+        An ``int`` to use as the seed for random functions.
 
     Returns
     -------
@@ -337,7 +343,7 @@ def _test_dataset(test_subset: list,
                          upscale_factor=upscale_factor,
                          dataset_multiplier=dataset_multiplier)
     if distributed:
-        test_sampler = DistributedSampler(test_data)
+        test_sampler = DistributedSampler(test_data, seed=seed)
         testloader = DataLoader(
             dataset=test_data,
             sampler=test_sampler,
@@ -359,7 +365,8 @@ def initialize_datasets(train_directory: str, batch_size: int,
                         crop_size: int = 96, upscale_factor: int = 4,
                         dataset_multiplier: int = 1,
                         workers: int = 16,
-                        distributed: bool = False) -> Tuple[DataLoader, DataLoader]:
+                        distributed: bool = False,
+                        seed: int = 0) -> Tuple[DataLoader, DataLoader]:
     """
     Initialize testing and training datasets.
 
@@ -392,6 +399,8 @@ def initialize_datasets(train_directory: str, batch_size: int,
     distributed : bool
         A ``boolean`` which evaluates to `True` if the application should be
         run in distributed mode.
+    seed : int
+        An ``int`` to use as the seed for random functions.
 
     Returns
     -------
@@ -407,12 +416,13 @@ def initialize_datasets(train_directory: str, batch_size: int,
                                  upscale_factor=upscale_factor,
                                  dataset_multiplier=dataset_multiplier,
                                  workers=workers,
-                                 distributed=distributed)
+                                 distributed=distributed, seed=seed)
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
                                batch_size=batch_size,
                                crop_size=crop_size,
                                dataset_multiplier=dataset_multiplier,
-                               workers=workers, distributed=distributed)
+                               workers=workers, distributed=distributed,
+                               seed=seed)
     train_len = len(train_data) * dataset_multiplier
     test_len = len(test_data) * dataset_multiplier
     return trainloader, testloader, train_len, test_len
