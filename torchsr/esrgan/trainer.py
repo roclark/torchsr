@@ -311,7 +311,7 @@ class ESRGANTrainer:
             self._log_wandb(
                 {
                     f'{short_phase}/PSNR': psnr,
-                    f'{short_phase}/val-loss': loss,
+                    f'{short_phase}/val-pixel-loss': loss,
                     f'{short_phase}/throughput/test': throughput,
                     f'{short_phase}/epoch': epoch
                 },
@@ -394,7 +394,7 @@ class ESRGANTrainer:
 
                 self._log_wandb(
                     {
-                        'psnr/train-loss': loss,
+                        'psnr/train-pixel-loss': loss,
                         'psnr/epoch': epoch
                     },
                     step=step
@@ -466,13 +466,16 @@ class ESRGANTrainer:
             pixel_loss = self.l1_loss(super_res, high_res.detach())
             content_loss = self.vgg_loss(super_res, high_res.detach())
             adversarial_loss = self.bce_loss(fake_output - torch.mean(real_output), real_label)
-            gen_loss = 0.01 * pixel_loss + 1 * content_loss + 0.005 * adversarial_loss
+            gen_loss = pixel_loss + content_loss + adversarial_loss
 
         self._log_wandb(
             {
                 'gan/disc-lr': self.disc_scheduler.get_last_lr()[0],
                 'gan/gen-lr': self.gen_scheduler.get_last_lr()[0],
-                'gan/train-loss': gen_loss
+                'gan/train-gen-loss': gen_loss,
+                'gan/train-pixel-loss': pixel_loss,
+                'gan/train-content-loss': content_loss,
+                'gan/train-adversarial-loss': adversarial_loss
             },
             step=step
         )

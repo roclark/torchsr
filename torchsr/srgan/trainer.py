@@ -311,7 +311,7 @@ class SRGANTrainer:
             self._log_wandb(
                 {
                     f'{short_phase}/PSNR': psnr,
-                    f'{short_phase}/val-loss': loss,
+                    f'{short_phase}/val-pixel-loss': loss,
                     f'{short_phase}/throughput/test': throughput,
                     f'{short_phase}/epoch': epoch
                 },
@@ -392,7 +392,7 @@ class SRGANTrainer:
 
                 self._log_wandb(
                     {
-                        'psnr/train-loss': loss,
+                        'psnr/train-pixel-loss': loss,
                         'psnr/epoch': epoch
                     },
                     step=step
@@ -454,13 +454,15 @@ class SRGANTrainer:
 
         content_loss = self.vgg_loss(super_res, high_res.detach())
         adversarial_loss = self.bce_loss(self.discriminator(super_res), real_label)
-        gen_loss = content_loss + 0.001 * adversarial_loss
+        gen_loss = content_loss + adversarial_loss
 
         self._log_wandb(
             {
                 'gan/disc-lr': self.disc_scheduler.get_last_lr()[0],
                 'gan/gen-lr': self.gen_scheduler.get_last_lr()[0],
-                'gan/train-loss': gen_loss
+                'gan/train-content-loss': content_loss,
+                'gan/train-adversarial-loss': adversarial_loss,
+                'gan/train-generator-loss': gen_loss
             },
             step=step
         )
