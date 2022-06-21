@@ -293,6 +293,7 @@ def _train_dataset(train_subset: list, batch_size: int, crop_size: int = 96,
 
 def _test_dataset(test_subset: list,
                   upscale_factor: int = 4,
+                  batch_size: int = 1,
                   crop_size: int = 96,
                   dataset_multiplier: int = 1,
                   workers: int = 16,
@@ -310,6 +311,9 @@ def _test_dataset(test_subset: list,
     upscale_factor : int
         An ``int`` of the amount the image should be upscaled in each
         direction.
+    batch_size : int
+        An ``int`` of the number of images to include in each batch during
+        training.
     crop_size : int
         An ``int`` of the size to crop the high resolution images to in pixels.
         The size is used for both the height and width, ie. a crop_size of `96`
@@ -338,14 +342,14 @@ def _test_dataset(test_subset: list,
             dataset=test_data,
             sampler=test_sampler,
             num_workers=workers,
-            batch_size=1,
+            batch_size=batch_size,
             persistent_workers=True
         )
     else:
         testloader = DataLoader(
             dataset=test_data,
             num_workers=workers,
-            batch_size=1,
+            batch_size=batch_size,
             shuffle=False
         )
     return testloader
@@ -405,6 +409,7 @@ def initialize_datasets(train_directory: str, batch_size: int,
                                  workers=workers,
                                  distributed=distributed)
     testloader = _test_dataset(test_data, upscale_factor=upscale_factor,
+                               batch_size=batch_size,
                                crop_size=crop_size,
                                dataset_multiplier=dataset_multiplier,
                                workers=workers, distributed=distributed)
