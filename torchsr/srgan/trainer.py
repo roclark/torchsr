@@ -299,7 +299,7 @@ class SRGANTrainer:
 
             end_time = time.time()
             time_taken = end_time - start_time
-            throughput = len(self.test_loader) * self.world_size / time_taken
+            throughput = len(self.test_loader) * self.batch_size * self.world_size / time_taken
             psnr = psnr / len(self.test_loader)
             loss = loss / len(self.test_loader)
 
