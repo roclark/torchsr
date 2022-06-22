@@ -10,7 +10,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import numpy as np
 import os
+import random
 import torch
 import torch.distributed as dist
 try:
@@ -147,6 +149,8 @@ def distributed_params(args: Namespace) -> Tuple[Namespace, bool]:
         args.rank = -1
         args.local_rank = -1
         args.local_world_size = 1
+    if args.seed:
+        torch.manual_seed(args.seed + args.rank)
     return args, distributed
 
 
@@ -211,6 +215,9 @@ def parse_args() -> Namespace:
                        type=int, default=PRE_EPOCHS)
     train.add_argument('--psnr-checkpoint', help='Specify an existing trained '
                        'model for the PSNR-based training phase.', type=str)
+    train.add_argument('--seed', help='Specify a seed to use for random '
+                       'number generation in order to be more deterministic.',
+                       type=int, default=0)
     train.add_argument('--skip-image-save', help='By default, a sample image '
                        'is generated after every epoch and saved to the '
                        '"outputs/" directory. Add this flag to skip generating '
@@ -236,6 +243,12 @@ def main() -> None:
         wandb.init(config=args, name='TorchSR', project='torchsr')
     device = get_device(args)
     train_class, crop_size = select_trainer_model(args)
+
+    if args.seed:
+        # Disable benchmark mode for more deterministic runs
+        torch.backends.cudnn.benchmark = False
+        random.seed(args.seed)
+        np.random.seed(args.seed)
     
     if args.function == 'test':
         model = select_test_model(args)
@@ -249,7 +262,8 @@ def main() -> None:
             crop_size=crop_size,
             dataset_multiplier=args.dataset_multiplier,
             workers=args.data_workers,
-            distributed=distributed
+            distributed=distributed,
+            seed=args.seed
         )
         trainer = train_class(device, args, train_loader, test_loader,
                               train_len, test_len, distributed)
