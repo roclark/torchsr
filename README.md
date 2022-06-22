@@ -252,7 +252,7 @@ Next, modify the `distributed.sh` script to the following:
 #SBATCH --ntasks-per-node=8
 
 srun \
-    --gres=gpu:8 \
+    --gpus-per-node=8 \
     --container-image <image name:tag here> \
     --container-mounts=/path/to/dataset:/dataset \
     bash -c 'wandb login && \
