@@ -219,7 +219,7 @@ sbatch file named `distributed.sh` with the following contents:
 #SBATCH --ntasks-per-node=8
 
 srun \
-    --gres=gpu:8 \
+    --gpus-per-node=8 \
     --container-image <image name:tag here> \
     --container-mounts=/path/to/dataset:/dataset \
     torchsr train \
@@ -227,7 +227,7 @@ srun \
         --dataset-multiplier 10
 ```
 
-Modify the `--ntasks-per-node=X` and `--gres=gpu:X` values to match the expected
+Modify the `--ntasks-per-node=X` and `--gpus-per-node=X` values to match the expected
 number of GPUs available per node. Replace `<image name:tag here>` with the name
 specified during the Docker image build above. Replace the `/path/to/dataset`
 with the location of your dataset.
